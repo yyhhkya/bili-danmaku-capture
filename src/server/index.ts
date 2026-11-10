@@ -2,8 +2,10 @@ import fs from 'node:fs'
 import http from 'node:http'
 import express, { type NextFunction, type Request, type Response } from 'express'
 
+import { LoginRateLimiter, requireAuth } from './auth.js'
 import { loadConfig, loadDotEnv } from './config.js'
 import { createLogger } from './logger.js'
+import { createAuthRouter } from './routes/auth.js'
 
 loadDotEnv()
 
@@ -12,6 +14,13 @@ const logger = createLogger('info')
 
 const app = express()
 app.disable('x-powered-by')
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  next()
+})
 app.use(express.json({ limit: '16kb' }))
 
 app.use('/api', (_req, res, next) => {
@@ -22,6 +31,10 @@ app.use('/api', (_req, res, next) => {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, uptime: Math.round(process.uptime()) })
 })
+
+const loginLimiter = new LoginRateLimiter()
+app.use('/api/auth', createAuthRouter(config, loginLimiter, logger))
+app.use('/api', requireAuth(config.sessionSecret))
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: '接口不存在' } })
@@ -40,6 +53,10 @@ if (hasClientBuild) {
 }
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (error instanceof SyntaxError && 'body' in error) {
+    res.status(400).json({ error: { code: 'INVALID_JSON', message: '请求体格式错误' } })
+    return
+  }
   const message = error instanceof Error ? error.message : '未知错误'
   logger.error('请求处理失败', { message })
   res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: '服务器内部错误' } })

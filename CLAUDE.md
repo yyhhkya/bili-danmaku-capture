@@ -79,6 +79,7 @@ npm test             # node:test 单元测试
 | `PORT` | 否 | HTTP 端口，默认 3000 |
 | `MAX_ROOMS` | 否 | 同时监控房间上限，默认 10 |
 | `SESSION_DAYS` | 否 | 网站会话有效期，默认 7 天 |
+| `COOKIE_SECURE` | 否 | 通过 HTTPS 访问时设为 `true`，会话 Cookie 带 `Secure` |
 
 ## 认证与安全约定
 
