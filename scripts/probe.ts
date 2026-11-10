@@ -33,7 +33,7 @@ try {
     短号: room.shortId,
     标题: room.title,
     直播状态: room.liveStatus,
-    在线: room.online,
+    'get_info.online': room.online,
     分区: room.areaName,
   })
 

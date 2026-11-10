@@ -109,10 +109,9 @@ npm run ws-probe -- 6 20     # 验证 WebSocket 鉴权、订阅与推送
 
 ## 直播指标口径
 
-- **人气**：`room/v1/Room/get_info` 的 `online` 字段，与 B 站直播页 `popularity_text` 一致。心跳 op3 在部分房间会返回 `1`，不可作为展示值。
 - **在线用户**：WebSocket `ONLINE_RANK_COUNT.online_count`，可能被房间隐藏或封顶；未收到时显示 `—`。
 - **看过人数**：`WATCHED_CHANGE.num` 或 `getInfoByRoom.watched_show.num`。
-- 不要把 `get_info.online` 当在线人数，也不要用心跳 op3 覆盖人气。
+- 界面不展示人气。`get_info.online` 是热度值，心跳 op3 在部分房间会返回 `1`，二者都不可当作在线人数。
 
 ## 开发约定
 

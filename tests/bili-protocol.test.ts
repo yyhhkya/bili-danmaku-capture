@@ -6,7 +6,6 @@ import {
   ProtocolError,
   encodePacket,
   parsePackets,
-  readPopularity,
 } from '../src/server/bili/packet.js'
 import { decodeInteractWordV2 } from '../src/server/bili/protobuf.js'
 import { parseRoomInfo } from '../src/server/bili/room.js'
@@ -48,14 +47,6 @@ test('非法封包头抛出协议错误', () => {
   bad.writeUInt32BE(8, 0)
   bad.writeUInt16BE(16, 4)
   assert.throws(() => parsePackets(bad), ProtocolError)
-})
-
-test('读取心跳回复中的人气值', () => {
-  const body = Buffer.alloc(8)
-  body.writeUInt32BE(2466, 0)
-  const packet = parsePackets(encodePacket(3, body)).packets[0]
-  assert.ok(packet)
-  assert.equal(readPopularity(packet), 2466)
 })
 
 test('解析房间信息并回退缺失字段', () => {

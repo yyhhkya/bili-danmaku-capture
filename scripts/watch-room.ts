@@ -43,7 +43,6 @@ const client = new LiveDanmakuClient(info.realRoomId, {
       `[${shanghaiTime(event.ts)}] ${event.type} ${event.user.uname}(${event.user.uid}) ${medal} ${event.text}`,
     )
   },
-  onPopularity: (value) => console.log(`[人气] ${value}`),
   onState: (state, detail) =>
     console.log(`[状态] ${state}${detail?.error ? ` - ${detail.error}` : ''}`),
   logger,

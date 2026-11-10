@@ -136,7 +136,6 @@ export class RoomManager {
       cover: info?.cover ?? '',
       areaName: info?.areaName ?? '',
       liveStatus: info?.liveStatus ?? 0,
-      popularity: info?.online ?? 0,
       onlineUsers: null,
       watched: anchor?.watched ?? null,
       connection: 'idle',
@@ -379,7 +378,6 @@ export class RoomManager {
         const info = await fetchRoomInfo(this.deps.http, runtime.summary.inputRoomId)
         runtime.summary.title = info.title
         runtime.summary.liveStatus = info.liveStatus
-        runtime.summary.popularity = info.online
         runtime.summary.cover = info.cover
         runtime.summary.areaName = info.areaName
         runtime.summary.shortId = info.shortId

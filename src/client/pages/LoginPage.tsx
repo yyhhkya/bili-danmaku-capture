@@ -91,7 +91,7 @@ export function LoginPage({ submitting, error, onLogin }: LoginPageProps) {
           </h1>
           <p className="mt-6 max-w-xl text-sm leading-relaxed text-zinc-400">
             把多个直播间的弹幕、醒目留言、礼物与上舰汇成一条可回看的时间线，
-            连接状态、人气与消息速率都在视野里。
+            连接状态、在线与看过人数、消息速率都在视野里。
           </p>
 
           <div className="mt-12 border-t border-line">

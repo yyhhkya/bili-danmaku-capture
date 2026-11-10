@@ -88,9 +88,3 @@ export function parsePackets(input: Buffer, depth = 0): ParseResult {
 
   return { packets, rest: input.subarray(offset) }
 }
-
-/** op 3 心跳回复的前 4 字节为人气值。 */
-export function readPopularity(packet: DecodedPacket): number | null {
-  if (packet.op !== 3 || packet.body.length < 4) return null
-  return packet.body.readUInt32BE(0)
-}

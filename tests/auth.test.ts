@@ -25,9 +25,14 @@ test('会话签名可往返，并能识别篡改与错误密钥', () => {
   assert.equal(verifySessionToken(`${token}tampered`, secret), null)
   assert.equal(verifySessionToken(token, 'y'.repeat(40)), null)
 
-  const last = token.slice(-1)
-  const tampered = `${token.slice(0, -1)}${last === 'A' ? 'B' : 'A'}`
-  assert.equal(verifySessionToken(tampered, secret), null)
+  const [body, signature] = token.split('.')
+  assert.ok(body && signature)
+
+  const tamperedBody = `${body.slice(0, -1)}${body.endsWith('A') ? 'B' : 'A'}`
+  assert.equal(verifySessionToken(`${tamperedBody}.${signature}`, secret), null)
+
+  const tamperedSignature = `${signature.startsWith('A') ? 'B' : 'A'}${signature.slice(1)}`
+  assert.equal(verifySessionToken(`${body}.${tamperedSignature}`, secret), null)
 })
 
 test('过期会话被拒绝', () => {
