@@ -265,7 +265,7 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
 
   return (
     <main className="flex h-[100dvh] flex-col overflow-hidden bg-ink-950">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-ink-950/85 px-4 backdrop-blur sm:px-6">
+      <header className="relative z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-ink-950/85 px-4 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-2.5">
           <button
             type="button"
