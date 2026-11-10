@@ -1,5 +1,6 @@
 import type { Logger } from '../logger.js'
 import type { BiliSessionStore } from './session.js'
+import { extractWbiKeys, signParams, type WbiKeys } from './wbi.js'
 
 export const BILI_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
@@ -9,6 +10,8 @@ export interface NavInfo {
   isLogin: boolean
   uname: string
   face: string
+  wbiImgKey: string
+  wbiSubKey: string
 }
 
 interface NavResponse {
@@ -94,11 +97,17 @@ export class BiliHttp {
       if (!data.data?.wbi_img) {
         throw new BiliApiError(data.code, data.message || '无法获取导航栏信息', 'nav')
       }
+      const keys = extractWbiKeys(
+        data.data.wbi_img.img_url ?? '',
+        data.data.wbi_img.sub_url ?? '',
+      )
       const info: NavInfo = {
         mid: Number(data.data.mid ?? 0),
         isLogin: Boolean(data.data.isLogin),
         uname: data.data.uname ?? '',
         face: data.data.face ?? '',
+        wbiImgKey: keys.imgKey,
+        wbiSubKey: keys.subKey,
       }
       this.navCache = { at: Date.now(), data: info }
       return info
@@ -109,6 +118,32 @@ export class BiliHttp {
     } finally {
       this.navInFlight = null
     }
+  }
+
+  async getWbiKeys(force = false): Promise<WbiKeys> {
+    const nav = await this.getNav(force)
+    return { imgKey: nav.wbiImgKey, subKey: nav.wbiSubKey }
+  }
+
+  /** 带 WBI 签名的 GET；遇到 -352 或 v_voucher 时强制刷新 key 后重试一次。 */
+  async getSigned<T>(
+    url: string,
+    params: Record<string, string | number | undefined> = {},
+  ): Promise<T> {
+    const attempt = async (forceKeys: boolean): Promise<T> => {
+      const keys = await this.getWbiKeys(forceKeys)
+      const query = signParams(params, keys)
+      const separator = url.includes('?') ? '&' : '?'
+      return this.getJson<T>(`${url}${separator}${query}`)
+    }
+
+    const result = await attempt(false)
+    const envelope = result as { code?: number; data?: { v_voucher?: string } }
+    if (envelope.code === -352 || envelope.data?.v_voucher) {
+      this.navCache = null
+      return attempt(true)
+    }
+    return result
   }
 
   async ensureBuvid3(): Promise<string> {

@@ -50,3 +50,40 @@ export interface BiliRefreshResponse {
   account: BiliStatus
 }
 
+export type EventType = 'danmaku' | 'superchat' | 'gift' | 'guard' | 'enter' | 'follow'
+
+export interface EventMedal {
+  level: number
+  name: string
+  anchorUname?: string
+  color?: string
+}
+
+export interface EventUser {
+  uid: number
+  uname: string
+  face?: string
+  guardLevel: number
+  isAdmin?: boolean
+  medal?: EventMedal
+}
+
+export interface NormalizedEvent {
+  v: 1
+  id: string
+  roomId: number
+  type: EventType
+  ts: number
+  receivedAt: number
+  user: EventUser
+  text: string
+  color?: string
+  price?: number
+  extra?: {
+    giftName?: string
+    num?: number
+    guardName?: string
+    duration?: number
+  }
+}
+
