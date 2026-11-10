@@ -71,7 +71,14 @@ function Sparkline({ events }: { events: NormalizedEvent[] }) {
 
 export function StatsBar({ room, events }: Props) {
   const metrics = [
-    { label: '在线', value: formatCount(room.online) },
+    {
+      label: '在线',
+      value: room.onlineUsers !== null ? formatCount(room.onlineUsers) : '—',
+    },
+    {
+      label: '看过',
+      value: room.watched !== null ? formatCount(room.watched) : '—',
+    },
     { label: '人气', value: formatCount(room.popularity) },
     { label: '弹幕 / 分', value: String(room.messageRate) },
     {
@@ -82,7 +89,7 @@ export function StatsBar({ room, events }: Props) {
 
   return (
     <div className="flex shrink-0 items-stretch border-b border-line">
-      <div className="grid flex-1 grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
+      <div className="grid flex-1 grid-cols-2 divide-line sm:grid-cols-5 sm:divide-x">
         {metrics.map((metric) => (
           <div key={metric.label} className="px-4 py-3">
             <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-600">{metric.label}</p>
@@ -90,7 +97,7 @@ export function StatsBar({ room, events }: Props) {
           </div>
         ))}
       </div>
-      <div className="hidden w-44 shrink-0 border-l border-line px-4 py-3 md:block">
+      <div className="hidden w-40 shrink-0 border-l border-line px-4 py-3 md:block">
         <Sparkline events={events} />
       </div>
     </div>

@@ -111,7 +111,14 @@ export function RoomSidebar({
                       <span className={live.tone === 'live' ? 'text-live' : undefined}>
                         {live.label}
                       </span>
-                      <span>{formatCount(room.online)} 在线</span>
+                      <span>
+                        {room.onlineUsers !== null
+                          ? `${formatCount(room.onlineUsers)} 在线`
+                          : '在线 —'}
+                      </span>
+                      {room.watched !== null ? (
+                        <span>{formatCount(room.watched)} 看过</span>
+                      ) : null}
                       <span>{room.messageRate}/分</span>
                       <span className={connection.tone === 'danger' ? 'text-danger' : undefined}>
                         {connection.label}

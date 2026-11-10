@@ -136,8 +136,9 @@ export class RoomManager {
       cover: info?.cover ?? '',
       areaName: info?.areaName ?? '',
       liveStatus: info?.liveStatus ?? 0,
-      online: info?.online ?? 0,
-      popularity: 0,
+      popularity: info?.online ?? 0,
+      onlineUsers: null,
+      watched: anchor?.watched ?? null,
       connection: 'idle',
       messageRate: 0,
       addedAt: fallback?.addedAt ?? Date.now(),
@@ -156,8 +157,12 @@ export class RoomManager {
       fetchEndpoint: (roomId) => fetchDanmuEndpoint(this.deps.http, roomId),
       getUid: () => this.deps.account.getUid(),
       onEvent: (event) => this.onEvent(runtime, event),
-      onPopularity: (value) => {
-        runtime.summary.popularity = value
+      onOnlineCount: (value) => {
+        runtime.summary.onlineUsers = value
+        this.scheduleStatus()
+      },
+      onWatched: (value) => {
+        runtime.summary.watched = value
         this.scheduleStatus()
       },
       onState: (state, detail) => {
@@ -374,7 +379,7 @@ export class RoomManager {
         const info = await fetchRoomInfo(this.deps.http, runtime.summary.inputRoomId)
         runtime.summary.title = info.title
         runtime.summary.liveStatus = info.liveStatus
-        runtime.summary.online = info.online
+        runtime.summary.popularity = info.online
         runtime.summary.cover = info.cover
         runtime.summary.areaName = info.areaName
         runtime.summary.shortId = info.shortId
@@ -383,6 +388,9 @@ export class RoomManager {
           if (anchor) {
             runtime.summary.uname = anchor.uname
             runtime.summary.face = anchor.face
+            if (runtime.summary.watched === null && anchor.watched !== null) {
+              runtime.summary.watched = anchor.watched
+            }
           }
         }
         void this.loadEmoticons(runtime, true)

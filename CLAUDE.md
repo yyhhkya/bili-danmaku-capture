@@ -107,6 +107,13 @@ npm run ws-probe -- 6 20     # 验证 WebSocket 鉴权、订阅与推送
 - 装扮/UP 主表情（`upower_` 等）不在 `emots` 中，用直播间历史弹幕接口的 `emoticon` 字段补齐 token→图片映射；房间启动与每 60 秒刷新缓存，遇到未匹配 token 时按需再查一次。
 - 写入按房间串行、批量 flush；历史读取从文件尾部反向读取；CSV 带 UTF-8 BOM，并防公式注入。
 
+## 直播指标口径
+
+- **人气**：`room/v1/Room/get_info` 的 `online` 字段，与 B 站直播页 `popularity_text` 一致。心跳 op3 在部分房间会返回 `1`，不可作为展示值。
+- **在线用户**：WebSocket `ONLINE_RANK_COUNT.online_count`，可能被房间隐藏或封顶；未收到时显示 `—`。
+- **看过人数**：`WATCHED_CHANGE.num` 或 `getInfoByRoom.watched_show.num`。
+- 不要把 `get_info.online` 当在线人数，也不要用心跳 op3 覆盖人气。
+
 ## 开发约定
 
 - 代码注释、文档、示例文本使用中文；标识符（变量、函数、接口名）使用英文。

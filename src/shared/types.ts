@@ -115,8 +115,12 @@ export interface RoomSummary {
   cover: string
   areaName: string
   liveStatus: 0 | 1 | 2
-  online: number
+  /** 人气值（get_info.online / 心跳 op3） */
   popularity: number
+  /** WebSocket ONLINE_RANK_COUNT 的在线用户数；未收到时为 null */
+  onlineUsers: number | null
+  /** 看过人数（WATCHED_CHANGE / getInfoByRoom.watched_show） */
+  watched: number | null
   connection: RoomConnectionState
   messageRate: number
   addedAt: number

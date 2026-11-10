@@ -2,16 +2,17 @@ import WebSocket, { type RawData } from 'ws'
 
 import type { NormalizedEvent, RoomConnectionState } from '../../shared/types.js'
 import type { Logger } from '../logger.js'
-import { normalizeMessage } from './events.js'
+import { normalizeMessage, parsePresenceStat } from './events.js'
 import { BILI_UA } from './http.js'
-import { encodePacket, parsePackets, readPopularity } from './packet.js'
+import { encodePacket, parsePackets } from './packet.js'
 import type { DanmuEndpoint } from './room.js'
 
 export interface LiveClientDeps {
   fetchEndpoint: (roomId: number) => Promise<DanmuEndpoint>
   getUid: () => number
   onEvent: (event: NormalizedEvent) => void
-  onPopularity: (value: number) => void
+  onOnlineCount?: (value: number) => void
+  onWatched?: (value: number) => void
   onState: (state: RoomConnectionState, detail?: { error?: string }) => void
   onAuthFailure?: () => void
   logger: Logger
@@ -243,17 +244,17 @@ export class LiveDanmakuClient {
         continue
       }
 
-      if (packet.op === 3) {
-        const popularity = readPopularity(packet)
-        if (popularity !== null) this.deps.onPopularity(popularity)
-        continue
-      }
-
       if (packet.op === 5) {
         let payload: unknown
         try {
           payload = JSON.parse(packet.body.toString('utf8'))
         } catch {
+          continue
+        }
+        const stat = parsePresenceStat(payload)
+        if (stat) {
+          if (stat.onlineUsers !== undefined) this.deps.onOnlineCount?.(stat.onlineUsers)
+          if (stat.watched !== undefined) this.deps.onWatched?.(stat.watched)
           continue
         }
         const event = normalizeMessage(payload, {

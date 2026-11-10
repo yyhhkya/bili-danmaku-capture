@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { normalizeMessage } from '../src/server/bili/events.js'
+import { normalizeMessage, parsePresenceStat } from '../src/server/bili/events.js'
 
 const roomId = 5440
 const receivedAt = 1_800_000_000_000
@@ -259,6 +259,21 @@ test('从 info[13] 解析 UP 主/装扮表情对象', () => {
   assert.equal(event.emoticonUnique, `upower_${token}`)
   assert.equal(event.emoticons?.[token]?.url, emote.url)
   assert.equal(event.emoticons?.[token]?.width, 20)
+})
+
+test('解析在线用户数与看过人数', () => {
+  assert.deepEqual(
+    parsePresenceStat({ cmd: 'ONLINE_RANK_COUNT', data: { count: 7, online_count: 7 } }),
+    { onlineUsers: 7 },
+  )
+  assert.deepEqual(parsePresenceStat({ cmd: 'WATCHED_CHANGE', data: { num: 15 } }), {
+    watched: 15,
+  })
+  assert.equal(
+    parsePresenceStat({ cmd: 'ONLINE_RANK_COUNT', data: { online_count: -1, count: 12 } }),
+    null,
+  )
+  assert.equal(parsePresenceStat({ cmd: 'DANMU_MSG' }), null)
 })
 
 test('未知消息被忽略', () => {

@@ -18,6 +18,7 @@ export interface AnchorInfo {
   uid: number
   uname: string
   face: string
+  watched: number | null
 }
 
 export interface DanmuHost {
@@ -51,6 +52,7 @@ interface AnchorResponse {
   message?: string
   data?: {
     room_info?: { uid?: number }
+    watched_show?: { num?: number }
     anchor_info?: {
       base_info?: { uid?: number; uname?: string; face?: string }
     }
@@ -112,12 +114,21 @@ export async function fetchAnchorInfo(
   })
   if (response.code !== 0) return null
   const base = response.data?.anchor_info?.base_info
-  const uname = base?.uname?.trim()
-  if (!uname) return null
+  const uname = base?.uname?.trim() ?? ''
+  const watched = Number(response.data?.watched_show?.num)
+  const watchedValue = Number.isFinite(watched) && watched >= 0 ? watched : null
+
+  if (!uname) {
+    return watchedValue === null
+      ? null
+      : { uid: 0, uname: '', face: '', watched: watchedValue }
+  }
+
   return {
     uid: toNumber(base?.uid, toNumber(response.data?.room_info?.uid)),
     uname,
     face: base?.face ?? '',
+    watched: watchedValue,
   }
 }
 

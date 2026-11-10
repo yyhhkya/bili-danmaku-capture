@@ -305,6 +305,36 @@ function normalizeInteractV2(payload: Rec, ctx: Context): NormalizedEvent | null
   )
 }
 
+export interface LivePresenceStat {
+  onlineUsers?: number
+  watched?: number
+}
+
+/** 提取在线用户数与看过人数，这两个值只作为房间状态更新，不生成事件。 */
+export function parsePresenceStat(payload: unknown): LivePresenceStat | null {
+  const record = asRecord(payload)
+  const cmd = asString(record?.cmd)
+  if (!cmd) return null
+
+  if (cmd.startsWith('ONLINE_RANK_COUNT')) {
+    const data = asRecord(record?.data)
+    if (data?.online_count !== undefined) {
+      const online = Number(data.online_count)
+      return Number.isFinite(online) && online >= 0 ? { onlineUsers: online } : null
+    }
+    const count = Number(data?.count)
+    return Number.isFinite(count) && count >= 0 ? { onlineUsers: count } : null
+  }
+
+  if (cmd.startsWith('WATCHED_CHANGE')) {
+    const data = asRecord(record?.data)
+    const value = Number(data?.num)
+    return Number.isFinite(value) && value >= 0 ? { watched: value } : null
+  }
+
+  return null
+}
+
 export function normalizeMessage(
   payload: unknown,
   ctx: { roomId: number; receivedAt?: number; emoticons?: Record<string, EventEmoticon> },
