@@ -4,9 +4,11 @@ import test from 'node:test'
 import {
   extractEmoticonObject,
   fetchRecentEmoticons,
+  fillEventEmoticons,
   parseEmoticonPackages,
   type JsonHttp,
 } from '../src/server/bili/emoticons.js'
+import type { NormalizedEvent } from '../src/shared/types.js'
 
 const TOKEN = '[哈基蜜集_露出鲨头]'
 const URL = 'https://i0.hdslb.com/bfs/garb/af63d93470d365b486439ddd04a010d87cf7ad1d.png'
@@ -110,4 +112,40 @@ test('解析房间表情包，补方括号、升级 https 并优先 UP主大表�
 test('表情包解析对异常结构返回空字典', () => {
   assert.deepEqual(parseEmoticonPackages(null), {})
   assert.deepEqual(parseEmoticonPackages({ code: 0, data: { data: 'oops' } }), {})
+})
+
+function makeDanmaku(text: string, emoticonUnique?: string): NormalizedEvent {
+  return {
+    v: 1,
+    id: 'test',
+    roomId: 1783351037,
+    type: 'danmaku',
+    ts: 1,
+    receivedAt: 1,
+    user: { uid: 1, uname: '测试', guardLevel: 0 },
+    text,
+    emoticonUnique,
+  }
+}
+
+test('纯表情消息正文不带方括号时按裸文本补齐', () => {
+  const dictionary = {
+    '[坠入爱河]': { url: 'https://i0.hdslb.com/bfs/live/love.png', width: 162, height: 162 },
+  }
+  const event = makeDanmaku('坠入爱河', 'room_1783351037_116694')
+  assert.equal(fillEventEmoticons(event, dictionary), true)
+  assert.equal(event.emoticons?.['坠入爱河']?.url, 'https://i0.hdslb.com/bfs/live/love.png')
+
+  const plain = makeDanmaku('坠入爱河')
+  assert.equal(fillEventEmoticons(plain, dictionary), false)
+  assert.equal(plain.emoticons, undefined)
+})
+
+test('方括号 token 始终按 token 匹配', () => {
+  const dictionary = {
+    '[有趣]': { url: 'https://i0.hdslb.com/bfs/live/fun.png', width: 162, height: 162 },
+  }
+  const event = makeDanmaku('来点[有趣]的')
+  assert.equal(fillEventEmoticons(event, dictionary), true)
+  assert.equal(event.emoticons?.['[有趣]']?.url, 'https://i0.hdslb.com/bfs/live/fun.png')
 })

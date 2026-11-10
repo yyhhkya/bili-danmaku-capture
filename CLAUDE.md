@@ -110,6 +110,7 @@ npm run ws-probe -- 6 20     # 验证 WebSocket 鉴权、订阅与推送
 - 弹幕表情从 `DANMU_MSG` 的 `extra.emots` 提取，只保留 `*.hdslb.com` 的图片地址并升级为 https；前端按 token 替换为图片，历史记录同样可回显。
 - 房间专属表情走 `GetEmoticons`（`platform=pc&room_id`，Cookie 只读）：房间启动拉取一次、之后每 15 分钟一次，`UP主大表情` 优先于 `房间专属表情` 的同名 token；解析结果与历史弹幕接口学到的 token 一起写入 `data/emoticons/`。
 - 落盘前按字典补齐事件表情；历史读取时对缺失 token 再补一次，因此旧记录也能出图。字典查不到时保留原文。
+- 纯表情弹幕的正文可能不带方括号（如「坠入爱河」）：消息带 `emoticon_unique` 且整条文本等于表情名时按裸文本补图，其它情况只认 `[token]`，避免普通词被误判。
 - 写入按房间串行、批量 flush；历史读取从文件尾部反向读取；CSV 带 UTF-8 BOM，并防公式注入。
 
 ## 直播指标口径

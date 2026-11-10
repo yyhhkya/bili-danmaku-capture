@@ -1,4 +1,4 @@
-import type { EventEmoticon } from '../../shared/types.js'
+import type { EventEmoticon, NormalizedEvent } from '../../shared/types.js'
 
 type Rec = Record<string, unknown>
 
@@ -126,6 +126,40 @@ export function normalizeEmoticonEntry(value: unknown): EventEmoticon | null {
     width: Math.max(1, asNumber(info?.width, 20)),
     height: Math.max(1, asNumber(info?.height, 20)),
   }
+}
+
+const EMOTE_TOKEN_PATTERN = /\[[^[\]]{1,64}\]/g
+
+/**
+ * 用字典给弹幕补表情。
+ * 带方括号的 token 直接匹配；纯表情消息的正文可能不带方括号（如「坠入爱河」），
+ * 这种情况下只在消息带 `emoticonUnique` 时按裸文本匹配，避免把普通词误判成表情。
+ */
+export function fillEventEmoticons(
+  event: NormalizedEvent,
+  dictionary: Record<string, EventEmoticon>,
+): boolean {
+  if (event.type !== 'danmaku') return false
+  let changed = false
+
+  for (const token of event.text.match(EMOTE_TOKEN_PATTERN) ?? []) {
+    const info = dictionary[token]
+    if (!info || event.emoticons?.[token]) continue
+    event.emoticons = { ...(event.emoticons ?? {}), [token]: info }
+    changed = true
+  }
+
+  if (!event.emoticonUnique) return changed
+  const bareText = event.text.trim()
+  for (const [token, info] of Object.entries(dictionary)) {
+    if (token.length < 3 || !token.startsWith('[') || !token.endsWith(']')) continue
+    const bare = token.slice(1, -1)
+    // 只认「整条消息就是一个表情名」的裸文本，避免普通词被误判。
+    if (!bare || bareText !== bare || event.emoticons?.[bare]) continue
+    event.emoticons = { ...(event.emoticons ?? {}), [bare]: info }
+    changed = true
+  }
+  return changed
 }
 
 /**

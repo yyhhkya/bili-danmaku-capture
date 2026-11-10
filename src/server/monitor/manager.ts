@@ -4,7 +4,11 @@ import type { Response } from 'express'
 import type { EventEmoticon, NormalizedEvent, RoomSummary } from '../../shared/types.js'
 import { shanghaiDateKey } from '../../shared/time.js'
 import type { BiliAccount } from '../bili/account.js'
-import { fetchRecentEmoticons, fetchRoomEmoticonPackages } from '../bili/emoticons.js'
+import {
+  fetchRecentEmoticons,
+  fetchRoomEmoticonPackages,
+  fillEventEmoticons,
+} from '../bili/emoticons.js'
 import type { BiliHttp } from '../bili/http.js'
 import { LiveDanmakuClient } from '../bili/live-client.js'
 import {
@@ -21,24 +25,6 @@ import { JsonlStore, RoomRepository, type StoredRoom } from './store.js'
 
 const PACKAGE_REFRESH_MS = 15 * 60_000
 const EMOTE_TOKEN_PATTERN = /\[[^[\]]{1,64}\]/g
-
-/** 用房间表情字典补齐事件中缺失的 token；返回是否有改动。 */
-function enrichEventEmoticons(
-  event: NormalizedEvent,
-  dictionary: Record<string, EventEmoticon>,
-): boolean {
-  if (event.type !== 'danmaku') return false
-  const tokens = event.text.match(EMOTE_TOKEN_PATTERN)
-  if (!tokens) return false
-  let changed = false
-  for (const token of tokens) {
-    const info = dictionary[token]
-    if (!info || event.emoticons?.[token]) continue
-    event.emoticons = { ...(event.emoticons ?? {}), [token]: info }
-    changed = true
-  }
-  return changed
-}
 
 export type RoomErrorCode = 'INVALID_ROOM' | 'ROOM_LIMIT' | 'ROOM_EXISTS' | 'ROOM_NOT_FOUND'
 
@@ -276,11 +262,18 @@ export class RoomManager {
     if (event.type !== 'danmaku') return false
     if (!event.emoticonUnique) return false
     const tokens = event.text.match(EMOTE_TOKEN_PATTERN) ?? []
-    return tokens.some((token) => !event.emoticons?.[token] && !runtime.emoticons[token])
+    if (tokens.some((token) => !event.emoticons?.[token] && !runtime.emoticons[token])) return true
+    if (tokens.length > 0) return false
+    // 纯表情消息的正文没有方括号，按字典里的裸名字判断是否已知。
+    const bareText = event.text.trim()
+    return !Object.keys(runtime.emoticons).some((token) => {
+      const bare = token.slice(1, -1)
+      return bare !== '' && bareText === bare && !event.emoticons?.[bare]
+    })
   }
 
   private applyCachedEmoticons(runtime: Runtime, event: NormalizedEvent): boolean {
-    return enrichEventEmoticons(event, runtime.emoticons)
+    return fillEventEmoticons(event, runtime.emoticons)
   }
 
   private async resolveEventEmoticons(runtime: Runtime, event: NormalizedEvent): Promise<void> {
@@ -435,7 +428,7 @@ export class RoomManager {
     if (!runtime) throw new RoomError('ROOM_NOT_FOUND', '直播间不在监控列表中')
     const events = await runtime.store.readRecent(date, Math.min(Math.max(limit, 1), 500))
     // 落盘时未解析的表情，用当前字典补齐后再回给前端。
-    for (const event of events) enrichEventEmoticons(event, runtime.emoticons)
+    for (const event of events) fillEventEmoticons(event, runtime.emoticons)
     return events
   }
 
