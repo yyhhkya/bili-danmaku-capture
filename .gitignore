@@ -43,3 +43,11 @@ out/
 # 抓取产物（按需调整）
 data/
 output/
+
+# 第三方 API 文档克隆（自带 .git，不作为本仓库内容提交）
+docs/bilibili-API-collect/
+
+# 构建缓存
+*.tsbuildinfo
+.vite/
+
