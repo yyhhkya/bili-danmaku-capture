@@ -51,3 +51,7 @@ docs/bilibili-API-collect/
 *.tsbuildinfo
 .vite/
 
+# Claude Code 本地设置
+.claude/settings.local.json
+.claude/worktrees/
+

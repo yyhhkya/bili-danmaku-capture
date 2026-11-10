@@ -386,7 +386,8 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
                   {roomsLoading ? '正在读取监控列表' : '选择或添加一个直播间'}
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-                  在左侧输入房间号或粘贴 <span className="font-mono text-xs">live.bilibili.com</span> 链接，
+                  在房间列表中添加一个直播间，或粘贴{' '}
+                  <span className="font-mono text-xs">live.bilibili.com</span> 链接。
                   实时弹幕、醒目留言与礼物会汇入这里。
                 </p>
               </div>

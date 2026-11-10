@@ -23,11 +23,30 @@ const logger = createLogger('info')
 
 const app = express()
 app.disable('x-powered-by')
+
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https://*.hdslb.com",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ')
+
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'no-referrer')
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY)
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+  if (config.cookieSecure) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
   next()
 })
 app.use(express.json({ limit: '16kb' }))
@@ -94,7 +113,7 @@ const hasClientBuild = fs.existsSync(config.clientDir)
 if (hasClientBuild) {
   app.use(express.static(config.clientDir, { index: false }))
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.method !== 'GET') {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
       next()
       return
     }
