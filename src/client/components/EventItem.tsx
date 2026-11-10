@@ -1,5 +1,5 @@
 import { Gift, SealCheck, SignIn, UserPlus } from '@phosphor-icons/react'
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 
 import type { NormalizedEvent } from '../../shared/types.js'
 import { shanghaiTime } from '../../shared/time.js'
@@ -19,6 +19,44 @@ function TypeIcon({ type }: { type: NormalizedEvent['type'] }) {
   if (type === 'enter') return <SignIn size={12} weight="regular" />
   if (type === 'follow') return <UserPlus size={12} weight="regular" />
   return null
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** 把 [{token}] 替换为 B 站表情图片，未匹配的 token 保持原文。 */
+function EventContent({ event }: { event: NormalizedEvent }) {
+  const parts = useMemo(() => {
+    const emoticons = event.emoticons
+    if (!emoticons) return null
+    const tokens = Object.keys(emoticons).sort((a, b) => b.length - a.length)
+    if (tokens.length === 0) return null
+    const pattern = new RegExp(`(${tokens.map(escapeRegExp).join('|')})`, 'g')
+    return event.text.split(pattern)
+  }, [event.text, event.emoticons])
+
+  if (!parts) return <>{event.text}</>
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        const emoticon = event.emoticons?.[part]
+        if (!emoticon) return <span key={index}>{part}</span>
+        return (
+          <img
+            key={`${part}-${index}`}
+            src={emoticon.url}
+            alt={part}
+            title={part}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="mx-0.5 inline-block h-[1.6em] w-auto max-w-[10em] align-[-0.35em] object-contain"
+          />
+        )
+      })}
+    </>
+  )
 }
 
 export const EventItem = memo(function EventItem({ event }: { event: NormalizedEvent }) {
@@ -99,7 +137,7 @@ export const EventItem = memo(function EventItem({ event }: { event: NormalizedE
         </div>
 
         <p className={`mt-0.5 break-words text-[13px] leading-relaxed ${textColor}`}>
-          {event.text}
+          <EventContent event={event} />
           {isSuperChat && event.extra?.duration
             ? `（停留 ${event.extra.duration} 秒）`
             : ''}

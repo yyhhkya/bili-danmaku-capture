@@ -18,7 +18,11 @@ import {
 
 const silent = createLogger('error')
 
-function makeEvent(ts: number, text: string): NormalizedEvent {
+function makeEvent(
+  ts: number,
+  text: string,
+  emoticons?: NormalizedEvent['emoticons'],
+): NormalizedEvent {
   return {
     v: 1,
     id: randomUUID(),
@@ -28,6 +32,7 @@ function makeEvent(ts: number, text: string): NormalizedEvent {
     receivedAt: ts,
     user: { uid: 1, uname: '测试用户', guardLevel: 0 },
     text,
+    emoticons,
   }
 }
 
@@ -44,8 +49,11 @@ test('JSONL 按北京时间日期落盘，可反向读取最近记录', async ()
   await withTempDir(async (dir) => {
     const store = new JsonlStore(path.join(dir, 'room'), silent)
     const base = Date.UTC(2026, 10, 10, 12, 0, 0)
+    const emoticons = {
+      '[OH]': { url: 'https://i0.hdslb.com/bfs/live/oh.png', width: 20, height: 20 },
+    }
     store.append(makeEvent(base, '第一条'))
-    store.append(makeEvent(base + 1000, '第二条'))
+    store.append(makeEvent(base + 1000, '[OH]', emoticons))
     await store.flush()
     await store.close()
 
@@ -58,7 +66,8 @@ test('JSONL 按北京时间日期落盘，可反向读取最近记录', async ()
     const reopened = new JsonlStore(path.join(dir, 'room'), silent)
     const recent = await reopened.readRecent(date, 1)
     assert.equal(recent.length, 1)
-    assert.equal(recent[0]?.text, '第二条')
+    assert.equal(recent[0]?.text, '[OH]')
+    assert.deepEqual(recent[0]?.emoticons, emoticons)
 
     const dates = await reopened.listDates()
     assert.deepEqual(dates.map((item) => item.date), [date])

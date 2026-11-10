@@ -102,7 +102,8 @@ npm run ws-probe -- 6 20     # 验证 WebSocket 鉴权、订阅与推送
 
 - `data/rooms.json`：监控中的房间配置（输入号、真实房间号、标题、主播、添加时间），原子写入。
 - `data/<真实房间号>/<YYYY-MM-DD>.jsonl`：每行一个归一化事件；日期固定按 `Asia/Shanghai` 计算；UTF-8、LF、无 BOM。
-- 事件结构见 `src/shared/types.ts`，含 `v`、`id`、`roomId`、`type`、`ts`、`receivedAt`、`user`、`text`、`price`、`extra`。
+- 事件结构见 `src/shared/types.ts`，含 `v`、`id`、`roomId`、`type`、`ts`、`receivedAt`、`user`、`text`、`price`、`emoticons`、`extra`。
+- 弹幕表情从 `DANMU_MSG` 的 `extra.emots` 提取，只保留 `*.hdslb.com` 的图片地址并升级为 https；前端按 token 替换为图片，历史记录同样可回显。
 - 写入按房间串行、批量 flush；历史读取从文件尾部反向读取；CSV 带 UTF-8 BOM，并防公式注入。
 
 ## 开发约定

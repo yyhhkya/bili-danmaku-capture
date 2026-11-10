@@ -28,7 +28,26 @@ test('归一化带后缀的 DANMU_MSG', () => {
         '',
         '',
         {
-          extra: JSON.stringify({ id_str: 'extra-id' }),
+          extra: JSON.stringify({
+            id_str: 'extra-id',
+            emots: {
+              '[热]': {
+                url: 'http://i0.hdslb.com/bfs/live/hot.png',
+                width: 20,
+                height: 20,
+              },
+              '[兔年吉祥東雪蓮_哈哈]': {
+                url: 'http://i1.hdslb.com/bfs/live/custom.png',
+                width: 100,
+                height: 40,
+              },
+              '[坏]': {
+                url: 'https://evil.example/x.png',
+                width: 20,
+                height: 20,
+              },
+            },
+          }),
           user: {
             uid: 123,
             base: { name: '张三', face: 'https://i0.hdslb.com/face.jpg' },
@@ -37,7 +56,7 @@ test('归一化带后缀的 DANMU_MSG', () => {
           },
         },
       ],
-      '你好，世界',
+      '你好[热][兔年吉祥東雪蓮_哈哈][坏]',
       [123, '张三', 1, 0, 0, 0, 0],
       [21, '牌子', '主播', 0, 1725515],
       [],
@@ -53,7 +72,7 @@ test('归一化带后缀的 DANMU_MSG', () => {
   assert.ok(event)
   assert.equal(event.type, 'danmaku')
   assert.equal(event.id, 'm1')
-  assert.equal(event.text, '你好，世界')
+  assert.equal(event.text, '你好[热][兔年吉祥東雪蓮_哈哈][坏]')
   assert.equal(event.ts, 1_700_000_001_000)
   assert.equal(event.user.uid, 123)
   assert.equal(event.user.uname, '张三')
@@ -61,6 +80,12 @@ test('归一化带后缀的 DANMU_MSG', () => {
   assert.equal(event.user.isAdmin, true)
   assert.equal(event.user.medal?.level, 21)
   assert.equal(event.color, '#ffffff')
+  assert.equal(event.emoticons?.['[热]']?.url, 'https://i0.hdslb.com/bfs/live/hot.png')
+  assert.equal(
+    event.emoticons?.['[兔年吉祥東雪蓮_哈哈]']?.width,
+    100,
+  )
+  assert.equal(event.emoticons?.['[坏]'], undefined)
 })
 
 test('归一化醒目留言', () => {

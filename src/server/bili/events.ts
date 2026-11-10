@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto'
 
-import type { EventMedal, EventType, EventUser, NormalizedEvent } from '../../shared/types.js'
+import type {
+  EventEmoticon,
+  EventMedal,
+  EventType,
+  EventUser,
+  NormalizedEvent,
+} from '../../shared/types.js'
 import { decodeInteractWordV2 } from './protobuf.js'
 
 type Rec = Record<string, unknown>
@@ -59,6 +65,40 @@ function parseJsonString(value: unknown): Rec | undefined {
   }
 }
 
+function normalizeEmoteUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) return undefined
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+    const host = url.hostname.toLowerCase()
+    if (host !== 'hdslb.com' && !host.endsWith('.hdslb.com')) return undefined
+    // B 站部分表情地址是 http，页面在 https 下会被混合内容拦截。
+    url.protocol = 'https:'
+    return url.toString()
+  } catch {
+    return undefined
+  }
+}
+
+function extractEmoticons(value: unknown): Record<string, EventEmoticon> | undefined {
+  const source = asRecord(value)
+  if (!source) return undefined
+
+  const result: Record<string, EventEmoticon> = {}
+  for (const [token, raw] of Object.entries(source)) {
+    if (!token || token.length > 64) continue
+    const info = asRecord(raw)
+    const url = normalizeEmoteUrl(info?.url)
+    if (!url) continue
+    result[token] = {
+      url,
+      width: Math.max(1, asNumber(info?.width, 20)),
+      height: Math.max(1, asNumber(info?.height, 20)),
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
 function medalFromObject(
   medal: Rec | undefined,
   levelKey = 'medal_level',
@@ -81,7 +121,9 @@ function baseEvent(
   type: EventType,
   user: EventUser,
   text: string,
-  extra: Partial<Pick<NormalizedEvent, 'color' | 'price' | 'extra' | 'id' | 'ts'>>,
+  extra: Partial<
+    Pick<NormalizedEvent, 'color' | 'price' | 'extra' | 'id' | 'ts' | 'emoticons'>
+  >,
 ): NormalizedEvent {
   return {
     v: 1,
@@ -94,6 +136,7 @@ function baseEvent(
     text,
     color: extra.color,
     price: extra.price,
+    emoticons: extra.emoticons,
     extra: extra.extra,
   }
 }
@@ -103,6 +146,7 @@ function normalizeDanmaku(payload: Rec, ctx: Context): NormalizedEvent {
   const meta = asArray(info[0]) ?? []
   const metaExtra = asRecord(meta[15])
   const extra = parseJsonString(metaExtra?.extra)
+  const emoticons = extractEmoticons(extra?.emots)
   const userObj = asRecord(metaExtra?.user)
   const base = asRecord(userObj?.base)
   const userMedal = asRecord(userObj?.medal)
@@ -144,6 +188,7 @@ function normalizeDanmaku(payload: Rec, ctx: Context): NormalizedEvent {
       id: pickString(payload.msg_id, extra?.id_str) || undefined,
       ts,
       color: colorFromDecimal(meta[3]),
+      emoticons,
     },
   )
 }

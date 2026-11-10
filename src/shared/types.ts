@@ -59,6 +59,12 @@ export interface EventMedal {
   color?: string
 }
 
+export interface EventEmoticon {
+  url: string
+  width: number
+  height: number
+}
+
 export interface EventUser {
   uid: number
   uname: string
@@ -79,6 +85,7 @@ export interface NormalizedEvent {
   text: string
   color?: string
   price?: number
+  emoticons?: Record<string, EventEmoticon>
   extra?: {
     giftName?: string
     num?: number
