@@ -49,7 +49,7 @@ src/server/
   auth.ts              单密钥登录、HMAC 会话、限流、HTTP/WS 鉴权
   routes/              auth、rooms、history、bili
   bili/                WBI、HTTP 封装、会话/Cookie Jar、扫码登录、Cookie 续期、房间信息、封包、事件归一化、直播连接
-  monitor/             房间生命周期、JSONL 存储、CSV 导出
+  monitor/             房间生命周期、JSONL 存储、表情字典缓存、CSV 导出
   ws.ts                浏览器 WebSocket 网关
 src/client/            React 页面、组件、hooks、实时客户端、事件缓冲、样式
 tests/                 node:test 单元测试（不依赖真实 B 站网络）
@@ -105,9 +105,11 @@ npm run ws-probe -- 6 20     # 验证 WebSocket 鉴权、订阅与推送
 
 - `data/rooms.json`：监控中的房间配置（输入号、真实房间号、标题、主播、添加时间），原子写入。
 - `data/<真实房间号>/<YYYY-MM-DD>.jsonl`：每行一个归一化事件；日期固定按 `Asia/Shanghai` 计算；UTF-8、LF、无 BOM。
+- `data/emoticons/<真实房间号>.json`：房间表情字典（token → 图片、宽高、更新时间），原子写入；启动时先加载，再异步刷新。
 - 事件结构见 `src/shared/types.ts`，含 `v`、`id`、`roomId`、`type`、`ts`、`receivedAt`、`user`、`text`、`price`、`emoticons`、`extra`。
 - 弹幕表情从 `DANMU_MSG` 的 `extra.emots` 提取，只保留 `*.hdslb.com` 的图片地址并升级为 https；前端按 token 替换为图片，历史记录同样可回显。
-- 装扮/UP 主表情（`upower_` 等）不在 `emots` 中，用直播间历史弹幕接口的 `emoticon` 字段补齐 token→图片映射；房间启动与每 60 秒刷新缓存，遇到未匹配 token 时按需再查一次。
+- 房间专属表情走 `GetEmoticons`（`platform=pc&room_id`，Cookie 只读）：房间启动拉取一次、之后每 15 分钟一次，`UP主大表情` 优先于 `房间专属表情` 的同名 token；解析结果与历史弹幕接口学到的 token 一起写入 `data/emoticons/`。
+- 落盘前按字典补齐事件表情；历史读取时对缺失 token 再补一次，因此旧记录也能出图。字典查不到时保留原文。
 - 写入按房间串行、批量 flush；历史读取从文件尾部反向读取；CSV 带 UTF-8 BOM，并防公式注入。
 
 ## 直播指标口径

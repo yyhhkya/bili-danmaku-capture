@@ -4,7 +4,7 @@ import type { Response } from 'express'
 import type { EventEmoticon, NormalizedEvent, RoomSummary } from '../../shared/types.js'
 import { shanghaiDateKey } from '../../shared/time.js'
 import type { BiliAccount } from '../bili/account.js'
-import { fetchRecentEmoticons } from '../bili/emoticons.js'
+import { fetchRecentEmoticons, fetchRoomEmoticonPackages } from '../bili/emoticons.js'
 import type { BiliHttp } from '../bili/http.js'
 import { LiveDanmakuClient } from '../bili/live-client.js'
 import {
@@ -16,7 +16,29 @@ import {
 } from '../bili/room.js'
 import type { AppConfig } from '../config.js'
 import type { Logger } from '../logger.js'
+import { EmoteStore } from './emote-store.js'
 import { JsonlStore, RoomRepository, type StoredRoom } from './store.js'
+
+const PACKAGE_REFRESH_MS = 15 * 60_000
+const EMOTE_TOKEN_PATTERN = /\[[^[\]]{1,64}\]/g
+
+/** 用房间表情字典补齐事件中缺失的 token；返回是否有改动。 */
+function enrichEventEmoticons(
+  event: NormalizedEvent,
+  dictionary: Record<string, EventEmoticon>,
+): boolean {
+  if (event.type !== 'danmaku') return false
+  const tokens = event.text.match(EMOTE_TOKEN_PATTERN)
+  if (!tokens) return false
+  let changed = false
+  for (const token of tokens) {
+    const info = dictionary[token]
+    if (!info || event.emoticons?.[token]) continue
+    event.emoticons = { ...(event.emoticons ?? {}), [token]: info }
+    changed = true
+  }
+  return changed
+}
 
 export type RoomErrorCode = 'INVALID_ROOM' | 'ROOM_LIMIT' | 'ROOM_EXISTS' | 'ROOM_NOT_FOUND'
 
@@ -40,6 +62,8 @@ interface Runtime {
   eventTimes: number[]
   emoticons: Record<string, EventEmoticon>
   emoticonPromise: Promise<void> | null
+  emoticonPackageAt: number
+  emoticonSaveTimer: NodeJS.Timeout | null
 }
 
 export interface RoomManagerDeps {
@@ -58,12 +82,14 @@ export class RoomManager {
   private readonly rooms = new Map<number, Runtime>()
   private readonly statusSubscribers = new Set<(rooms: RoomSummary[]) => void>()
   private readonly repo: RoomRepository
+  private readonly emoteStore: EmoteStore
   private pollTimer: NodeJS.Timeout | null = null
   private statusTimer: NodeJS.Timeout | null = null
   private initialized = false
 
   constructor(private readonly deps: RoomManagerDeps) {
     this.repo = new RoomRepository(deps.config.dataDir, deps.logger)
+    this.emoteStore = new EmoteStore(deps.config.dataDir, deps.logger)
   }
 
   async init(): Promise<void> {
@@ -184,12 +210,50 @@ export class RoomManager {
       eventTimes: [],
       emoticons: {},
       emoticonPromise: null,
+      emoticonPackageAt: 0,
+      emoticonSaveTimer: null,
     }
     this.rooms.set(summary.roomId, runtime)
     client.start()
-    void this.loadEmoticons(runtime)
+    void this.initEmoticons(runtime)
     this.scheduleStatus()
     return runtime
+  }
+
+  /** 先用落盘字典，再拉包级表情，最后补历史弹幕学到的 token。 */
+  private async initEmoticons(runtime: Runtime): Promise<void> {
+    try {
+      const cached = await this.emoteStore.load(runtime.summary.roomId)
+      for (const [token, info] of Object.entries(cached)) {
+        if (!runtime.emoticons[token]) runtime.emoticons[token] = info
+      }
+    } catch {
+      // 缓存读取失败不影响后续拉取
+    }
+    await this.refreshPackageEmoticons(runtime, true)
+    await this.loadEmoticons(runtime)
+  }
+
+  private async refreshPackageEmoticons(runtime: Runtime, force = false): Promise<void> {
+    const now = Date.now()
+    if (!force && now - runtime.emoticonPackageAt < PACKAGE_REFRESH_MS) return
+    runtime.emoticonPackageAt = now
+    try {
+      const map = await fetchRoomEmoticonPackages(this.deps.http, runtime.summary.roomId)
+      let changed = false
+      for (const [token, info] of Object.entries(map)) {
+        // 包级数据会随主播更新图片，同名 token 以最新包为准。
+        if (runtime.emoticons[token]?.url === info.url) continue
+        runtime.emoticons[token] = info
+        changed = true
+      }
+      if (changed) this.scheduleEmoticonSave(runtime)
+    } catch (error) {
+      this.deps.logger.warn('房间表情包拉取失败', {
+        roomId: runtime.summary.roomId,
+        reason: error instanceof Error ? error.message : '未知错误',
+      })
+    }
   }
 
   private onEvent(runtime: Runtime, event: NormalizedEvent): void {
@@ -211,21 +275,17 @@ export class RoomManager {
   private needsEmoticonLookup(runtime: Runtime, event: NormalizedEvent): boolean {
     if (event.type !== 'danmaku') return false
     if (!event.emoticonUnique) return false
-    const tokens = event.text.match(/\[[^[\]]{1,64}\]/g) ?? []
+    const tokens = event.text.match(EMOTE_TOKEN_PATTERN) ?? []
     return tokens.some((token) => !event.emoticons?.[token] && !runtime.emoticons[token])
   }
 
   private applyCachedEmoticons(runtime: Runtime, event: NormalizedEvent): boolean {
-    let changed = false
-    for (const [token, info] of Object.entries(runtime.emoticons)) {
-      if (!event.text.includes(token) || event.emoticons?.[token]) continue
-      event.emoticons = { ...(event.emoticons ?? {}), [token]: info }
-      changed = true
-    }
-    return changed
+    return enrichEventEmoticons(event, runtime.emoticons)
   }
 
   private async resolveEventEmoticons(runtime: Runtime, event: NormalizedEvent): Promise<void> {
+    await this.refreshPackageEmoticons(runtime)
+    if (this.applyCachedEmoticons(runtime, event)) return
     await this.loadEmoticons(runtime)
     if (this.applyCachedEmoticons(runtime, event)) return
     // 历史接口可能比 WebSocket 晚一拍，稍后再试一次。
@@ -240,7 +300,9 @@ export class RoomManager {
     let promise: Promise<void>
     promise = fetchRecentEmoticons(this.deps.http, runtime.summary.roomId)
       .then((map) => {
-        if (Object.keys(map).length > 0) Object.assign(runtime.emoticons, map)
+        if (Object.keys(map).length === 0) return
+        Object.assign(runtime.emoticons, map)
+        this.scheduleEmoticonSave(runtime)
       })
       .catch(() => undefined)
       .finally(() => {
@@ -248,6 +310,27 @@ export class RoomManager {
       })
     runtime.emoticonPromise = promise
     return promise
+  }
+
+  private scheduleEmoticonSave(runtime: Runtime): void {
+    if (runtime.emoticonSaveTimer) return
+    runtime.emoticonSaveTimer = setTimeout(() => {
+      runtime.emoticonSaveTimer = null
+      void this.flushEmoticonSave(runtime)
+    }, 2000)
+    runtime.emoticonSaveTimer.unref()
+  }
+
+  private async flushEmoticonSave(runtime: Runtime): Promise<void> {
+    if (Object.keys(runtime.emoticons).length === 0) return
+    try {
+      await this.emoteStore.save(runtime.summary.roomId, runtime.emoticons)
+    } catch (error) {
+      this.deps.logger.warn('表情缓存保存失败', {
+        roomId: runtime.summary.roomId,
+        reason: error instanceof Error ? error.message : '未知错误',
+      })
+    }
   }
 
   private recordEvent(runtime: Runtime, event: NormalizedEvent): void {
@@ -313,8 +396,11 @@ export class RoomManager {
     if (!runtime) return false
     runtime.client.stop()
     if (runtime.flushTimer) clearTimeout(runtime.flushTimer)
+    if (runtime.emoticonSaveTimer) clearTimeout(runtime.emoticonSaveTimer)
     runtime.flushTimer = null
+    runtime.emoticonSaveTimer = null
     runtime.pending = []
+    await this.flushEmoticonSave(runtime)
     await runtime.store.close()
     this.rooms.delete(roomId)
     await this.persist()
@@ -347,7 +433,10 @@ export class RoomManager {
   ): Promise<NormalizedEvent[]> {
     const runtime = this.rooms.get(roomId)
     if (!runtime) throw new RoomError('ROOM_NOT_FOUND', '直播间不在监控列表中')
-    return runtime.store.readRecent(date, Math.min(Math.max(limit, 1), 500))
+    const events = await runtime.store.readRecent(date, Math.min(Math.max(limit, 1), 500))
+    // 落盘时未解析的表情，用当前字典补齐后再回给前端。
+    for (const event of events) enrichEventEmoticons(event, runtime.emoticons)
+    return events
   }
 
   async dates(roomId: number): Promise<Array<{ date: string; size: number }>> {
@@ -391,6 +480,7 @@ export class RoomManager {
             }
           }
         }
+        void this.refreshPackageEmoticons(runtime)
         void this.loadEmoticons(runtime, true)
       } catch {
         // 单房间刷新失败不影响其他房间
@@ -426,9 +516,14 @@ export class RoomManager {
     for (const runtime of runtimes) {
       runtime.client.stop()
       if (runtime.flushTimer) clearTimeout(runtime.flushTimer)
+      if (runtime.emoticonSaveTimer) clearTimeout(runtime.emoticonSaveTimer)
       runtime.flushTimer = null
+      runtime.emoticonSaveTimer = null
     }
-    await Promise.all(runtimes.map((runtime) => runtime.store.close()))
+    await Promise.all([
+      ...runtimes.map((runtime) => runtime.store.close()),
+      ...runtimes.map((runtime) => this.flushEmoticonSave(runtime)),
+    ])
     this.rooms.clear()
   }
 }

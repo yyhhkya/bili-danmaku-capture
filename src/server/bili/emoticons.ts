@@ -116,9 +116,21 @@ export function pickUsedEmoticons(
   return Object.keys(result).length > 0 ? result : undefined
 }
 
+/** 校验并规范化一条表情记录，用于读取本地缓存。 */
+export function normalizeEmoticonEntry(value: unknown): EventEmoticon | null {
+  const info = asRecord(value)
+  const url = normalizeEmoteUrl(info?.url)
+  if (!url) return null
+  return {
+    url,
+    width: Math.max(1, asNumber(info?.width, 20)),
+    height: Math.max(1, asNumber(info?.height, 20)),
+  }
+}
+
 /**
- * 直播间自定义表情（upower/装扮）不会出现在 extra.emots 和 GetEmoticons 中，
- * 但历史弹幕接口会在 emoticon 字段里返回图片地址。这里把最近消息里的表情汇总成字典。
+ * 历史弹幕接口会在 emoticon 字段里返回图片地址，可作为包级字典的补充，
+ * 覆盖 GetEmoticons 未开放的房间表情。这里把最近消息里的表情汇总成字典。
  */
 export async function fetchRecentEmoticons(
   http: JsonHttp,
@@ -138,4 +150,80 @@ export async function fetchRecentEmoticons(
     if (multiple) Object.assign(result, multiple)
   }
   return result
+}
+
+interface PackageEmoticon {
+  emoji?: unknown
+  descript?: unknown
+  emoticon_unique?: unknown
+  url?: unknown
+  width?: unknown
+  height?: unknown
+}
+
+interface PackageGroup {
+  pkg_name?: unknown
+  pkg_type?: unknown
+  emoticons?: unknown
+}
+
+interface PackagesResponse {
+  code: number
+  message?: string
+  data?: { data?: unknown }
+}
+
+/** 同一 token 出现在多个包时的取舍：UP主大表情 > 房间专属 > 其它 > 公共表情。 */
+const PACK_RANK: Record<string, number> = {
+  emoji: 0,
+  通用表情: 0,
+  房间专属表情: 2,
+  UP主大表情: 3,
+}
+
+function tokenFromEmoji(value: unknown): string | null {
+  let token = asString(value).trim()
+  if (!token || token.length > 60) return null
+  if (!token.startsWith('[')) token = `[${token}]`
+  if (!token.endsWith(']')) token = `${token}]`
+  return token.length <= 64 ? token : null
+}
+
+/** 把 GetEmoticons 的返回解析成 token → 图片；非法地址与公共包重复项按规则过滤。 */
+export function parseEmoticonPackages(payload: unknown): Record<string, EventEmoticon> {
+  const groups = asRecord(asRecord(payload)?.data)?.data
+  if (!Array.isArray(groups)) return {}
+
+  const result: Record<string, EventEmoticon> = {}
+  const ranks: Record<string, number> = {}
+  for (const rawGroup of groups) {
+    const group = asRecord(rawGroup)
+    if (!group) continue
+    const rank = PACK_RANK[asString(group.pkg_name)] ?? 1
+    const list = Array.isArray(group.emoticons) ? group.emoticons : []
+    for (const rawItem of list) {
+      const item = rawItem as PackageEmoticon
+      const token = tokenFromEmoji(item.emoji) ?? tokenFromEmoji(item.descript)
+      if (!token) continue
+      const entry = normalizeEmoticonEntry(item)
+      if (!entry) continue
+      const previous = ranks[token]
+      if (previous !== undefined && previous > rank) continue
+      result[token] = entry
+      ranks[token] = rank
+    }
+  }
+  return result
+}
+
+/** 拉取直播间可用的表情包（UP主大表情、房间专属表情等），Cookie 只读接口。 */
+export async function fetchRoomEmoticonPackages(
+  http: JsonHttp,
+  realRoomId: number,
+): Promise<Record<string, EventEmoticon>> {
+  const data = await http.getJson<PackagesResponse>(
+    `https://api.live.bilibili.com/xlive/web-ucenter/v2/emoticon/GetEmoticons?platform=pc&room_id=${realRoomId}`,
+  )
+  if (data.code !== 0) return {}
+  return parseEmoticonPackages(data)
 }

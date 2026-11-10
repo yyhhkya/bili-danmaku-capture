@@ -15,6 +15,7 @@ import {
   csvEscape,
   eventToCsvRow,
 } from '../src/server/monitor/store.js'
+import { EmoteStore } from '../src/server/monitor/emote-store.js'
 
 const silent = createLogger('error')
 
@@ -108,4 +109,35 @@ test('解析房间号与直播间链接', () => {
   assert.equal(parseRoomIdInput(-1), null)
   assert.equal(parseRoomIdInput(''), null)
   assert.equal(parseRoomIdInput(null), null)
+})
+
+test('房间表情缓存可写入读回，并过滤非法来源', async () => {
+  await withTempDir(async (dir) => {
+    const store = new EmoteStore(dir, silent)
+    assert.deepEqual(await store.load(30866874), {})
+
+    await store.save(30866874, {
+      '[有趣]': { url: 'https://i0.hdslb.com/bfs/live/room.png', width: 162, height: 162 },
+    })
+    assert.deepEqual(await store.load(30866874), {
+      '[有趣]': { url: 'https://i0.hdslb.com/bfs/live/room.png', width: 162, height: 162 },
+    })
+
+    await fs.promises.mkdir(path.join(dir, 'emoticons'), { recursive: true })
+    await fs.promises.writeFile(
+      path.join(dir, 'emoticons', '42.json'),
+      JSON.stringify({
+        version: 1,
+        emoticons: {
+          '[好]': { url: 'https://evil.example/x.png', width: 20, height: 20 },
+          '[行]': { url: 'http://i0.hdslb.com/bfs/live/ok.png', width: 20, height: 20 },
+          bad: { url: 'https://i0.hdslb.com/bfs/live/key.png' },
+        },
+      }),
+      'utf8',
+    )
+    const filtered = await store.load(42)
+    assert.deepEqual(Object.keys(filtered), ['[行]'])
+    assert.equal(filtered['[行]']?.url, 'https://i0.hdslb.com/bfs/live/ok.png')
+  })
 })

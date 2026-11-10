@@ -7,7 +7,7 @@ B 站（bilibili）多直播间弹幕实时监控网站。Node + TypeScript + Re
 - 单密钥登录，无用户名；会话保存在 httpOnly Cookie。
 - 网页扫码登录 B 站账号，Cookie 自动检查与续期。
 - 同时监控多个直播间，实时展示弹幕、醒目留言、礼物、上舰、进场与关注事件。
-- 弹幕中的 `[表情]` token 自动替换为 B 站表情图片，包括直播间自定义/装扮表情，历史记录同样支持。
+- 弹幕中的 `[表情]` token 自动替换为 B 站表情图片，包括直播间专属与装扮表情；房间启动时预取表情包并缓存，历史记录同样支持。
 - 按类型、关键词、用户筛选；暂停、自动滚动、历史回看。
 - 按房间与北京时间日期落盘 JSONL，支持 CSV 导出。
 - 连接状态、在线用户数、看过人数与最近 60 秒弹幕速率。
@@ -76,6 +76,7 @@ node dist/main.mjs
 
 - `data/rooms.json`：监控中的房间配置。
 - `data/<真实房间号>/<YYYY-MM-DD>.jsonl`：每个事件一行，日期按北京时间。
+- `data/emoticons/<真实房间号>.json`：房间表情字典缓存（token → 图片）。
 - `data/bili-session.json`：B 站 Cookie 与 `refresh_token`，使用 AES-256-GCM 加密。
 - `.env`、`data/`、`docs/bilibili-API-collect/` 均不会提交到 Git。
 - Cookie、`refresh_token`、访问密钥只存在于服务端，不会出现在前端代码或接口响应中。
