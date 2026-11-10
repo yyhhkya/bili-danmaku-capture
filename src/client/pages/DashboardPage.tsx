@@ -39,6 +39,8 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
   const reduceMotion = useReducedMotion()
   const bili = useBiliAccount()
   const [qrOpen, setQrOpen] = useState(false)
+  const openQr = useCallback(() => setQrOpen(true), [])
+  const closeQr = useCallback(() => setQrOpen(false), [])
 
   const [rooms, setRooms] = useState<RoomSummary[]>([])
   const [roomsLoading, setRoomsLoading] = useState(true)
@@ -299,7 +301,7 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
           <BiliAccountPanel
             status={bili.status}
             loading={bili.loading}
-            onQrLogin={() => setQrOpen(true)}
+            onQrLogin={openQr}
             onLogout={bili.logout}
             onRefreshCookie={bili.refreshCookie}
           />
@@ -315,7 +317,7 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
         </div>
       </header>
 
-      <StatusBanner status={bili.status} onLogin={() => setQrOpen(true)} />
+      <StatusBanner status={bili.status} onLogin={openQr} />
 
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-[300px] shrink-0 flex-col border-r border-line bg-ink-950 lg:flex">
@@ -447,7 +449,7 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
 
       <QrLoginDialog
         open={qrOpen}
-        onClose={() => setQrOpen(false)}
+        onClose={closeQr}
         startQr={bili.startQr}
         pollQr={bili.pollQr}
         onAccountUpdated={bili.setStatus}

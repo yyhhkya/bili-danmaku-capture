@@ -1,6 +1,6 @@
 import { ArrowClockwise, CheckCircle, WarningCircle, X } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type {
   BiliQrPollResponse,
@@ -21,6 +21,8 @@ interface Props {
 
 export function QrLoginDialog({ open, onClose, startQr, pollQr, onAccountUpdated }: Props) {
   const reduceMotion = useReducedMotion()
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   const [reload, setReload] = useState(0)
   const [phase, setPhase] = useState<Phase>('loading')
   const [image, setImage] = useState<string | null>(null)
@@ -77,9 +79,9 @@ export function QrLoginDialog({ open, onClose, startQr, pollQr, onAccountUpdated
           setPhase('success')
           setHandle(null)
           if (result.account) onAccountUpdated(result.account)
-          window.setTimeout(() => {
-            if (!cancelled) onClose()
-          }, 900)
+          // 不依赖 effect 的 cancelled 标记：设置 handle 为 null 会立即触发清理，
+          // 若在这里判断 cancelled，弹窗会永远停在成功态。
+          window.setTimeout(() => onCloseRef.current(), 900)
         } else if (result.status === 'expired') {
           setPhase('expired')
           setHandle(null)
