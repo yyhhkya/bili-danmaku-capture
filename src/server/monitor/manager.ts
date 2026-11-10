@@ -1,9 +1,10 @@
 import path from 'node:path'
 import type { Response } from 'express'
 
-import type { NormalizedEvent, RoomSummary } from '../../shared/types.js'
+import type { EventEmoticon, NormalizedEvent, RoomSummary } from '../../shared/types.js'
 import { shanghaiDateKey } from '../../shared/time.js'
 import type { BiliAccount } from '../bili/account.js'
+import { fetchRecentEmoticons } from '../bili/emoticons.js'
 import type { BiliHttp } from '../bili/http.js'
 import { LiveDanmakuClient } from '../bili/live-client.js'
 import {
@@ -37,6 +38,8 @@ interface Runtime {
   pending: NormalizedEvent[]
   flushTimer: NodeJS.Timeout | null
   eventTimes: number[]
+  emoticons: Record<string, EventEmoticon>
+  emoticonPromise: Promise<void> | null
 }
 
 export interface RoomManagerDeps {
@@ -175,14 +178,75 @@ export class RoomManager {
       pending: [],
       flushTimer: null,
       eventTimes: [],
+      emoticons: {},
+      emoticonPromise: null,
     }
     this.rooms.set(summary.roomId, runtime)
     client.start()
+    void this.loadEmoticons(runtime)
     this.scheduleStatus()
     return runtime
   }
 
   private onEvent(runtime: Runtime, event: NormalizedEvent): void {
+    if (!this.needsEmoticonLookup(runtime, event)) {
+      this.applyCachedEmoticons(runtime, event)
+      this.recordEvent(runtime, event)
+      return
+    }
+    void (async () => {
+      try {
+        await this.resolveEventEmoticons(runtime, event)
+      } catch {
+        // 补齐失败时保留纯文本
+      }
+      this.recordEvent(runtime, event)
+    })()
+  }
+
+  private needsEmoticonLookup(runtime: Runtime, event: NormalizedEvent): boolean {
+    if (event.type !== 'danmaku') return false
+    if (!event.emoticonUnique) return false
+    const tokens = event.text.match(/\[[^[\]]{1,64}\]/g) ?? []
+    return tokens.some((token) => !event.emoticons?.[token] && !runtime.emoticons[token])
+  }
+
+  private applyCachedEmoticons(runtime: Runtime, event: NormalizedEvent): boolean {
+    let changed = false
+    for (const [token, info] of Object.entries(runtime.emoticons)) {
+      if (!event.text.includes(token) || event.emoticons?.[token]) continue
+      event.emoticons = { ...(event.emoticons ?? {}), [token]: info }
+      changed = true
+    }
+    return changed
+  }
+
+  private async resolveEventEmoticons(runtime: Runtime, event: NormalizedEvent): Promise<void> {
+    await this.loadEmoticons(runtime)
+    if (this.applyCachedEmoticons(runtime, event)) return
+    // 历史接口可能比 WebSocket 晚一拍，稍后再试一次。
+    await delay(700)
+    await this.loadEmoticons(runtime, true)
+    this.applyCachedEmoticons(runtime, event)
+  }
+
+  private loadEmoticons(runtime: Runtime, force = false): Promise<void> {
+    if (!force && runtime.emoticonPromise) return runtime.emoticonPromise
+
+    let promise: Promise<void>
+    promise = fetchRecentEmoticons(this.deps.http, runtime.summary.roomId)
+      .then((map) => {
+        if (Object.keys(map).length > 0) Object.assign(runtime.emoticons, map)
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (runtime.emoticonPromise === promise) runtime.emoticonPromise = null
+      })
+    runtime.emoticonPromise = promise
+    return promise
+  }
+
+  private recordEvent(runtime: Runtime, event: NormalizedEvent): void {
     runtime.summary.lastEventAt = event.receivedAt
     runtime.eventTimes.push(event.receivedAt)
     const cutoff = Date.now() - 60_000
@@ -321,6 +385,7 @@ export class RoomManager {
             runtime.summary.face = anchor.face
           }
         }
+        void this.loadEmoticons(runtime, true)
       } catch {
         // 单房间刷新失败不影响其他房间
       }

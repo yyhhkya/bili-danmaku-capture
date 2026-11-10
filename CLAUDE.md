@@ -104,6 +104,7 @@ npm run ws-probe -- 6 20     # 验证 WebSocket 鉴权、订阅与推送
 - `data/<真实房间号>/<YYYY-MM-DD>.jsonl`：每行一个归一化事件；日期固定按 `Asia/Shanghai` 计算；UTF-8、LF、无 BOM。
 - 事件结构见 `src/shared/types.ts`，含 `v`、`id`、`roomId`、`type`、`ts`、`receivedAt`、`user`、`text`、`price`、`emoticons`、`extra`。
 - 弹幕表情从 `DANMU_MSG` 的 `extra.emots` 提取，只保留 `*.hdslb.com` 的图片地址并升级为 https；前端按 token 替换为图片，历史记录同样可回显。
+- 装扮/UP 主表情（`upower_` 等）不在 `emots` 中，用直播间历史弹幕接口的 `emoticon` 字段补齐 token→图片映射；房间启动与每 60 秒刷新缓存，遇到未匹配 token 时按需再查一次。
 - 写入按房间串行、批量 flush；历史读取从文件尾部反向读取；CSV 带 UTF-8 BOM，并防公式注入。
 
 ## 开发约定

@@ -210,6 +210,57 @@ test('归一化 INTERACT_WORD_V2 样本', () => {
   assert.equal(event.ts, 1_751_716_524_000)
 })
 
+test('从 info[13] 解析 UP 主/装扮表情对象', () => {
+  const token = '[哈基蜜集_露出鲨头]'
+  const emote = {
+    text: token,
+    emoticon_unique: `upower_${token}`,
+    url: 'https://i0.hdslb.com/bfs/garb/af63d93470d365b486439ddd04a010d87cf7ad1d.png',
+    width: 20,
+    height: 20,
+  }
+  const payload = {
+    cmd: 'DANMU_MSG',
+    info: [
+      [
+        0,
+        1,
+        25,
+        16777215,
+        1_700_000_000_000,
+        -1,
+        0,
+        '0',
+        0,
+        0,
+        0,
+        '',
+        0,
+        JSON.stringify(emote),
+        '',
+        {
+          extra: JSON.stringify({
+            id_str: 'emote-id',
+            emoticon_unique: `upower_${token}`,
+            emots: null,
+          }),
+        },
+      ],
+      token,
+      [434059760, 'Yy在這裡呀'],
+      [],
+      [],
+    ],
+  }
+
+  const event = normalizeMessage(payload, { roomId, receivedAt })
+  assert.ok(event)
+  assert.equal(event.text, token)
+  assert.equal(event.emoticonUnique, `upower_${token}`)
+  assert.equal(event.emoticons?.[token]?.url, emote.url)
+  assert.equal(event.emoticons?.[token]?.width, 20)
+})
+
 test('未知消息被忽略', () => {
   assert.equal(normalizeMessage({ cmd: 'ONLINE_RANK_COUNT', data: {} }, { roomId }), null)
   assert.equal(normalizeMessage({ cmd: 'SUPER_CHAT_MESSAGE_JPN', data: {} }, { roomId }), null)

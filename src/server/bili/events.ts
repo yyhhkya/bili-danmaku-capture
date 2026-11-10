@@ -7,6 +7,7 @@ import type {
   EventUser,
   NormalizedEvent,
 } from '../../shared/types.js'
+import { extractEmoticons, extractEmoticonObject, pickUsedEmoticons } from './emoticons.js'
 import { decodeInteractWordV2 } from './protobuf.js'
 
 type Rec = Record<string, unknown>
@@ -14,6 +15,7 @@ type Rec = Record<string, unknown>
 interface Context {
   roomId: number
   receivedAt: number
+  emoticons?: Record<string, EventEmoticon>
 }
 
 function asRecord(value: unknown): Rec | undefined {
@@ -65,40 +67,6 @@ function parseJsonString(value: unknown): Rec | undefined {
   }
 }
 
-function normalizeEmoteUrl(value: unknown): string | undefined {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) return undefined
-  try {
-    const url = new URL(value)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
-    const host = url.hostname.toLowerCase()
-    if (host !== 'hdslb.com' && !host.endsWith('.hdslb.com')) return undefined
-    // B 站部分表情地址是 http，页面在 https 下会被混合内容拦截。
-    url.protocol = 'https:'
-    return url.toString()
-  } catch {
-    return undefined
-  }
-}
-
-function extractEmoticons(value: unknown): Record<string, EventEmoticon> | undefined {
-  const source = asRecord(value)
-  if (!source) return undefined
-
-  const result: Record<string, EventEmoticon> = {}
-  for (const [token, raw] of Object.entries(source)) {
-    if (!token || token.length > 64) continue
-    const info = asRecord(raw)
-    const url = normalizeEmoteUrl(info?.url)
-    if (!url) continue
-    result[token] = {
-      url,
-      width: Math.max(1, asNumber(info?.width, 20)),
-      height: Math.max(1, asNumber(info?.height, 20)),
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined
-}
-
 function medalFromObject(
   medal: Rec | undefined,
   levelKey = 'medal_level',
@@ -122,7 +90,10 @@ function baseEvent(
   user: EventUser,
   text: string,
   extra: Partial<
-    Pick<NormalizedEvent, 'color' | 'price' | 'extra' | 'id' | 'ts' | 'emoticons'>
+    Pick<
+      NormalizedEvent,
+      'color' | 'price' | 'extra' | 'id' | 'ts' | 'emoticons' | 'emoticonUnique'
+    >
   >,
 ): NormalizedEvent {
   return {
@@ -137,6 +108,7 @@ function baseEvent(
     color: extra.color,
     price: extra.price,
     emoticons: extra.emoticons,
+    emoticonUnique: extra.emoticonUnique,
     extra: extra.extra,
   }
 }
@@ -146,7 +118,21 @@ function normalizeDanmaku(payload: Rec, ctx: Context): NormalizedEvent {
   const meta = asArray(info[0]) ?? []
   const metaExtra = asRecord(meta[15])
   const extra = parseJsonString(metaExtra?.extra)
-  const emoticons = extractEmoticons(extra?.emots)
+  const text = asString(info[1])
+  const dictionary: Record<string, EventEmoticon> = { ...(ctx.emoticons ?? {}) }
+  const fromEmots = extractEmoticons(extra?.emots)
+  if (fromEmots) Object.assign(dictionary, fromEmots)
+  for (const candidate of [
+    payload.emoticon,
+    metaExtra?.emoticon,
+    meta[13],
+    meta[14],
+  ]) {
+    const single = extractEmoticonObject(candidate)
+    if (single) dictionary[single[0]] = single[1]
+  }
+  const emoticons = pickUsedEmoticons(text, dictionary)
+  const emoticonUnique = asString(extra?.emoticon_unique) || undefined
   const userObj = asRecord(metaExtra?.user)
   const base = asRecord(userObj?.base)
   const userMedal = asRecord(userObj?.medal)
@@ -183,12 +169,13 @@ function normalizeDanmaku(payload: Rec, ctx: Context): NormalizedEvent {
       isAdmin: asNumber(info2[2]) === 1 || undefined,
       medal,
     },
-    asString(info[1]),
+    text,
     {
       id: pickString(payload.msg_id, extra?.id_str) || undefined,
       ts,
       color: colorFromDecimal(meta[3]),
       emoticons,
+      emoticonUnique,
     },
   )
 }
@@ -320,14 +307,18 @@ function normalizeInteractV2(payload: Rec, ctx: Context): NormalizedEvent | null
 
 export function normalizeMessage(
   payload: unknown,
-  ctx: { roomId: number; receivedAt?: number },
+  ctx: { roomId: number; receivedAt?: number; emoticons?: Record<string, EventEmoticon> },
 ): NormalizedEvent | null {
   const record = asRecord(payload)
   if (!record) return null
   const cmd = asString(record.cmd)
   if (!cmd) return null
 
-  const context: Context = { roomId: ctx.roomId, receivedAt: ctx.receivedAt ?? Date.now() }
+  const context: Context = {
+    roomId: ctx.roomId,
+    receivedAt: ctx.receivedAt ?? Date.now(),
+    emoticons: ctx.emoticons,
+  }
   const baseCmd = cmd.split(':')[0]
 
   switch (baseCmd) {

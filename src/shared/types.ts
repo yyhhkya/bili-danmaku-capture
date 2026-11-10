@@ -86,6 +86,8 @@ export interface NormalizedEvent {
   color?: string
   price?: number
   emoticons?: Record<string, EventEmoticon>
+  /** 直播消息里的 upower/装扮表情唯一标识，用于补齐图片地址 */
+  emoticonUnique?: string
   extra?: {
     giftName?: string
     num?: number
