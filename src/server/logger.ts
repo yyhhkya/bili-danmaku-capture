@@ -1,3 +1,5 @@
+import { shanghaiDateTime } from '../shared/time.js'
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 const LEVEL_WEIGHT: Record<LogLevel, number> = {
@@ -37,7 +39,7 @@ export function createLogger(level: LogLevel = 'info'): Logger {
 
   const write = (logLevel: LogLevel, message: string, meta?: Record<string, unknown>) => {
     if (LEVEL_WEIGHT[logLevel] < threshold) return
-    const line = `${new Date().toISOString()} ${logLevel.toUpperCase()} ${redact(message)}${formatMeta(meta)}`
+    const line = `${shanghaiDateTime()} ${logLevel.toUpperCase()} ${redact(message)}${formatMeta(meta)}`
     if (logLevel === 'error') console.error(line)
     else if (logLevel === 'warn') console.warn(line)
     else console.log(line)

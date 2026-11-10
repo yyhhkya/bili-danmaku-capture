@@ -3,9 +3,14 @@ import http from 'node:http'
 import express, { type NextFunction, type Request, type Response } from 'express'
 
 import { LoginRateLimiter, requireAuth } from './auth.js'
+import { BiliAccount } from './bili/account.js'
+import { BiliHttp } from './bili/http.js'
+import { QrLoginService } from './bili/qr-login.js'
+import { BiliSessionStore } from './bili/session.js'
 import { loadConfig, loadDotEnv } from './config.js'
 import { createLogger } from './logger.js'
 import { createAuthRouter } from './routes/auth.js'
+import { createBiliRouter } from './routes/bili.js'
 
 loadDotEnv()
 
@@ -35,6 +40,30 @@ app.get('/api/health', (_req, res) => {
 const loginLimiter = new LoginRateLimiter()
 app.use('/api/auth', createAuthRouter(config, loginLimiter, logger))
 app.use('/api', requireAuth(config.sessionSecret))
+
+const biliSession = new BiliSessionStore(
+  config.dataDir,
+  config.sessionSecret,
+  config.bili.cookie,
+  logger,
+)
+const biliHttp = new BiliHttp(biliSession, logger)
+const biliAccount = new BiliAccount(biliSession, biliHttp, logger)
+const qrLogin = new QrLoginService(biliHttp, biliAccount, logger)
+
+void biliAccount
+  .init()
+  .then(() => {
+    const status = biliAccount.status()
+    logger.info('B 站账号状态', { loggedIn: status.loggedIn, source: status.source })
+  })
+  .catch((error: unknown) => {
+    logger.error('初始化 B 站会话失败', {
+      reason: error instanceof Error ? error.message : '未知错误',
+    })
+  })
+
+app.use('/api/bili', createBiliRouter(biliAccount, qrLogin))
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: '接口不存在' } })
