@@ -1,4 +1,4 @@
-import { ArrowRight, Broadcast, Eye, EyeSlash, WarningCircle } from '@phosphor-icons/react'
+import { ArrowRight, Eye, EyeSlash, WarningCircle } from '@phosphor-icons/react'
 import { motion, useReducedMotion } from 'motion/react'
 import { useState, type FormEvent } from 'react'
 
@@ -38,13 +38,6 @@ export function LoginPage({ submitting, error, onLogin }: LoginPageProps) {
         transition={{ type: 'spring', stiffness: 100, damping: 20 }}
         className="relative w-full max-w-sm"
       >
-        <div className="mb-8 flex items-center justify-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-xl border border-accent/30 bg-accent-soft text-accent">
-            <Broadcast size={18} weight="regular" />
-          </span>
-          <p className="text-sm font-semibold tracking-tight text-zinc-100">弹幕监控</p>
-        </div>
-
         <form onSubmit={handleSubmit} className="flex flex-col gap-3" noValidate>
           <label htmlFor="access-key" className="sr-only">
             访问密钥
