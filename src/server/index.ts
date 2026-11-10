@@ -10,8 +10,10 @@ import { QrLoginService } from './bili/qr-login.js'
 import { BiliSessionStore } from './bili/session.js'
 import { loadConfig, loadDotEnv } from './config.js'
 import { createLogger } from './logger.js'
+import { RoomManager } from './monitor/manager.js'
 import { createAuthRouter } from './routes/auth.js'
 import { createBiliRouter } from './routes/bili.js'
+import { createRoomsRouter } from './routes/rooms.js'
 
 loadDotEnv()
 
@@ -53,21 +55,35 @@ const biliAccount = new BiliAccount(biliSession, biliHttp, logger)
 const qrLogin = new QrLoginService(biliHttp, biliAccount, logger)
 const cookieRefresh = new CookieRefreshService(biliSession, biliHttp, logger)
 
-void biliAccount
-  .init()
-  .then(() => {
-    const status = biliAccount.status()
-    logger.info('B 站账号状态', { loggedIn: status.loggedIn, source: status.source })
+try {
+  await biliAccount.init()
+} catch (error) {
+  logger.error('初始化 B 站会话失败', {
+    reason: error instanceof Error ? error.message : '未知错误',
   })
-  .catch((error: unknown) => {
-    logger.error('初始化 B 站会话失败', {
-      reason: error instanceof Error ? error.message : '未知错误',
-    })
-  })
+}
+const biliStatus = biliAccount.status()
+logger.info('B 站账号状态', { loggedIn: biliStatus.loggedIn, source: biliStatus.source })
 
 cookieRefresh.start(config.bili.refreshCheckMs)
 
+const roomManager = new RoomManager({
+  config,
+  http: biliHttp,
+  account: biliAccount,
+  logger,
+  onAuthFailure: () => {
+    void cookieRefresh.run(true).catch((error: unknown) => {
+      logger.warn('弹幕认证失败后尝试续期 Cookie 未成功', {
+        reason: error instanceof Error ? error.message : '未知错误',
+      })
+    })
+  },
+})
+await roomManager.init()
+
 app.use('/api/bili', createBiliRouter(biliAccount, qrLogin, cookieRefresh))
+app.use('/api/rooms', createRoomsRouter(roomManager, logger))
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: '接口不存在' } })
@@ -110,8 +126,10 @@ function shutdown(signal: string): void {
   shuttingDown = true
   cookieRefresh.stop()
   logger.info('正在关闭服务', { signal })
-  server.close(() => process.exit(0))
-  setTimeout(() => process.exit(1), 5000).unref()
+  server.close(() => {
+    void roomManager.shutdown().finally(() => process.exit(0))
+  })
+  setTimeout(() => process.exit(1), 8000).unref()
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'))

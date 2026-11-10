@@ -15,15 +15,15 @@ export class BiliAccount {
   async init(): Promise<void> {
     await this.session.load()
     if (!this.session.hasCookie()) return
-    void this.refreshIdentity().catch((error: unknown) => {
-      this.logger.warn('B 站账号状态校验失败', {
-        reason: error instanceof Error ? error.message : '未知错误',
-      })
-    })
+    await this.refreshIdentity()
   }
 
   status(): BiliStatus {
     return this.session.snapshot()
+  }
+
+  getUid(): number {
+    return this.session.snapshot().uid ?? 0
   }
 
   getCookieHeader(): string {

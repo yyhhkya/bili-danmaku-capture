@@ -87,3 +87,40 @@ export interface NormalizedEvent {
   }
 }
 
+export type RoomConnectionState =
+  | 'idle'
+  | 'resolving'
+  | 'connecting'
+  | 'authenticating'
+  | 'connected'
+  | 'reconnecting'
+  | 'closed'
+
+export interface RoomSummary {
+  roomId: number
+  inputRoomId: number
+  shortId: number
+  title: string
+  uname: string
+  face: string
+  cover: string
+  areaName: string
+  liveStatus: 0 | 1 | 2
+  online: number
+  popularity: number
+  connection: RoomConnectionState
+  messageRate: number
+  addedAt: number
+  lastEventAt: number | null
+  lastError?: string
+}
+
+export interface RoomHistoryResponse {
+  date: string
+  events: NormalizedEvent[]
+}
+
+export interface RoomDatesResponse {
+  dates: Array<{ date: string; size: number }>
+}
+
