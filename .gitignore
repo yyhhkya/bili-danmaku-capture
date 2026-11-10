@@ -1,0 +1,45 @@
+# 操作系统
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 日志与临时文件
+*.log
+*.tmp
+tmp/
+temp/
+
+# Node.js
+node_modules/
+.npm/
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# 构建产物
+dist/
+build/
+out/
+
+# 抓取产物（按需调整）
+data/
+output/
