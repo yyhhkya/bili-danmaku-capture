@@ -36,6 +36,7 @@
 - 样式与交互：Tailwind CSS v4（`@tailwindcss/vite`，CSS-first `@theme`）、`@phosphor-icons/react`、`motion`。
 - 其他：`qrcode` 生成登录二维码；`node:crypto` 做 MD5/HMAC/AES/RSA；`node:zlib` 解压；内置 `fetch`。
 - 服务端 tsconfig 使用 NodeNext，相对导入必须带 `.js` 后缀。
+- 构建：服务端由 esbuild 打包成 `dist/main.mjs` 单文件（ESM，仅 `node:*` 与 `ws` 的可选原生依赖保持 external），生产运行不需要 `node_modules`（`express`、`ws`、`qrcode` 已打进产物）；前端由 Vite 输出 `dist/client`。
 - 不引入 UI 组件库、路由库、状态管理库、图表库、数据库驱动；新增依赖前先说明理由并更新本文件。
 
 ## 目录结构
@@ -63,14 +64,16 @@ docs/bilibili-API-collect/  第三方 API 文档，已被 gitignore
 ```bash
 npm install          # 安装依赖
 npm run dev          # 同时启动后端（APP_PORT，默认 3000）与 Vite（5173）
-npm run build        # 类型检查 + 编译服务端 + 构建前端
-npm start            # 运行构建产物（需先 build）
+npm run build        # 类型检查 + esbuild 打包服务端 + 构建前端
+npm start            # 运行 dist/main.mjs（需先 build，无需 node_modules）
 npm run typecheck    # 服务端与前端类型检查
 npm test             # node:test 单元测试
 npm run probe -- 6   # 探测房间信息、WBI 与弹幕服务器
 npm run watch-room -- 6 15   # 直接连接弹幕 15 秒并打印
 npm run ws-probe -- 6 20     # 验证 WebSocket 鉴权、订阅与推送
 ```
+
+生产部署只需 `dist/`（`main.cjs` + `client/`）与 `.env`；`data/` 按需挂载。不再需要上传 `package.json` 或 `node_modules`。
 
 ## 环境变量（.env）
 

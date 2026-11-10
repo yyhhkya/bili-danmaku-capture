@@ -64,7 +64,13 @@ npm run build
 npm start
 ```
 
-访问 `http://127.0.0.1:3000`。建议只监听本机，通过 Caddy/Nginx 等 HTTPS 反向代理对外提供服务，并设置 `COOKIE_SECURE=true`。
+服务端被 esbuild 打包成 `dist/main.mjs` 单文件，前端输出在 `dist/client`。部署时只需上传 `dist/` 与 `.env`，**不需要** `package.json` 或 `node_modules`：
+
+```bash
+node dist/main.mjs
+```
+
+访问 `http://127.0.0.1:3000`。建议只监听本机，通过 Caddy/Nginx 等 HTTPS 反向代理对外提供服务，并设置 `COOKIE_SECURE=true`。容器部署时设 `HOST=0.0.0.0`，否则容器内只监听回环地址。
 
 ## 数据与隐私
 
@@ -78,8 +84,8 @@ npm start
 
 ```bash
 npm run dev          # 同时启动服务端与 Vite
-npm run build        # 类型检查 + 构建前后端
-npm start            # 运行生产构建
+npm run build        # 类型检查 + 打包服务端 + 构建前端
+npm start            # 运行 dist/main.mjs（无需 node_modules）
 npm run typecheck    # 类型检查
 npm test             # 单元测试（node:test）
 npm run probe -- 6   # 探测房间信息、WBI、弹幕服务器
