@@ -14,6 +14,7 @@ import { RoomManager } from './monitor/manager.js'
 import { createAuthRouter } from './routes/auth.js'
 import { createBiliRouter } from './routes/bili.js'
 import { createRoomsRouter } from './routes/rooms.js'
+import { RealtimeGateway } from './ws.js'
 
 loadDotEnv()
 
@@ -112,6 +113,12 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
 })
 
 const server = http.createServer(app)
+const realtime = new RealtimeGateway(server, {
+  sessionSecret: config.sessionSecret,
+  roomManager,
+  logger,
+})
+realtime.start()
 
 server.listen(config.port, config.host, () => {
   logger.info('服务已启动', {
@@ -125,6 +132,7 @@ function shutdown(signal: string): void {
   if (shuttingDown) return
   shuttingDown = true
   cookieRefresh.stop()
+  realtime.stop()
   logger.info('正在关闭服务', { signal })
   server.close(() => {
     void roomManager.shutdown().finally(() => process.exit(0))
