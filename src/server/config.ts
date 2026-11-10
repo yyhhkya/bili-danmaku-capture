@@ -65,7 +65,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     accessKey,
     sessionSecret,
     sessionDays: readInt(env.SESSION_DAYS, 7, 1, 365),
-    port: readInt(env.PORT, 3000, 1, 65535),
+    port: readInt(env.APP_PORT, readInt(env.PORT, 3000, 1, 65535), 1, 65535),
     host: env.HOST?.trim() || '127.0.0.1',
     maxRooms: readInt(env.MAX_ROOMS, 10, 1, 50),
     cookieSecure: readBool(env.COOKIE_SECURE, false),

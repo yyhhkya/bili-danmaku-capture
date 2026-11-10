@@ -29,6 +29,7 @@ npm run dev
 | `BILI_COOKIE` | 否 | 可选的 B 站 Cookie 兜底 |
 | `BILI_REFRESH_CHECK_MS` | 否 | Cookie 续期检查间隔，默认 6 小时 |
 | `PORT` | 否 | 端口，默认 3000 |
+| `APP_PORT` | 否 | 后端端口；开发模式 Vite 代理使用，默认回退 `PORT` |
 | `MAX_ROOMS` | 否 | 监控房间上限，默认 10 |
 | `SESSION_DAYS` | 否 | 会话有效期，默认 7 天 |
 

@@ -77,6 +77,7 @@ npm test             # node:test 单元测试
 | `BILI_COOKIE` | 否 | 可选的 B 站 Cookie 兜底；扫码登录保存的会话优先 |
 | `BILI_REFRESH_CHECK_MS` | 否 | Cookie 续期检查间隔，默认 6 小时 |
 | `PORT` | 否 | HTTP 端口，默认 3000 |
+| `APP_PORT` | 否 | 后端端口；开发模式下 Vite 代理使用，未设置时回退 `PORT` |
 | `MAX_ROOMS` | 否 | 同时监控房间上限，默认 10 |
 | `SESSION_DAYS` | 否 | 网站会话有效期，默认 7 天 |
 | `COOKIE_SECURE` | 否 | 通过 HTTPS 访问时设为 `true`，会话 Cookie 带 `Secure` |
