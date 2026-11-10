@@ -4,6 +4,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 
 import { LoginRateLimiter, requireAuth } from './auth.js'
 import { BiliAccount } from './bili/account.js'
+import { CookieRefreshService } from './bili/cookie-refresh.js'
 import { BiliHttp } from './bili/http.js'
 import { QrLoginService } from './bili/qr-login.js'
 import { BiliSessionStore } from './bili/session.js'
@@ -50,6 +51,7 @@ const biliSession = new BiliSessionStore(
 const biliHttp = new BiliHttp(biliSession, logger)
 const biliAccount = new BiliAccount(biliSession, biliHttp, logger)
 const qrLogin = new QrLoginService(biliHttp, biliAccount, logger)
+const cookieRefresh = new CookieRefreshService(biliSession, biliHttp, logger)
 
 void biliAccount
   .init()
@@ -63,7 +65,9 @@ void biliAccount
     })
   })
 
-app.use('/api/bili', createBiliRouter(biliAccount, qrLogin))
+cookieRefresh.start(config.bili.refreshCheckMs)
+
+app.use('/api/bili', createBiliRouter(biliAccount, qrLogin, cookieRefresh))
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: '接口不存在' } })
@@ -104,6 +108,7 @@ let shuttingDown = false
 function shutdown(signal: string): void {
   if (shuttingDown) return
   shuttingDown = true
+  cookieRefresh.stop()
   logger.info('正在关闭服务', { signal })
   server.close(() => process.exit(0))
   setTimeout(() => process.exit(1), 5000).unref()

@@ -1,7 +1,7 @@
-import { CaretDown, QrCode, SignOut, UserCircle } from '@phosphor-icons/react'
+import { ArrowsClockwise, CaretDown, QrCode, SignOut, UserCircle } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
 
-import type { BiliStatus } from '../../shared/types.js'
+import type { BiliRefreshResponse, BiliStatus } from '../../shared/types.js'
 import { shanghaiDateTime } from '../../shared/time.js'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   loading: boolean
   onQrLogin: () => void
   onLogout: () => Promise<void>
+  onRefreshCookie: () => Promise<BiliRefreshResponse>
 }
 
 function Avatar({ face, name }: { face: string | null | undefined; name: string | null | undefined }) {
@@ -30,9 +31,17 @@ function Avatar({ face, name }: { face: string | null | undefined; name: string 
   )
 }
 
-export function BiliAccountPanel({ status, loading, onQrLogin, onLogout }: Props) {
+export function BiliAccountPanel({
+  status,
+  loading,
+  onQrLogin,
+  onLogout,
+  onRefreshCookie,
+}: Props) {
   const [open, setOpen] = useState(false)
   const [confirmingLogout, setConfirmingLogout] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -104,6 +113,31 @@ export function BiliAccountPanel({ status, loading, onQrLogin, onLogout }: Props
               <QrCode size={15} weight="regular" />
               重新扫码登录
             </button>
+            <button
+              type="button"
+              disabled={refreshing}
+              onClick={() => {
+                setRefreshing(true)
+                setRefreshMessage(null)
+                void onRefreshCookie()
+                  .then((result) => setRefreshMessage(result.message))
+                  .catch((err: unknown) =>
+                    setRefreshMessage(err instanceof Error ? err.message : '续期失败'),
+                  )
+                  .finally(() => setRefreshing(false))
+              }}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-zinc-300 transition-colors hover:bg-ink-800 hover:text-zinc-100 disabled:opacity-50"
+            >
+              <ArrowsClockwise
+                size={15}
+                weight="regular"
+                className={refreshing ? 'animate-spin' : undefined}
+              />
+              {refreshing ? '正在检查续期' : '检查并续期 Cookie'}
+            </button>
+            {refreshMessage ? (
+              <p className="px-3 pb-2 text-[11px] leading-relaxed text-zinc-500">{refreshMessage}</p>
+            ) : null}
             <button
               type="button"
               onClick={() => {

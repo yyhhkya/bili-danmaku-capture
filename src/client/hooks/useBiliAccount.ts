@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type {
   BiliQrPollResponse,
   BiliQrStartResponse,
+  BiliRefreshResponse,
   BiliStatus,
 } from '../../shared/types.js'
 import { ApiError, apiFetch } from '../api.js'
@@ -44,5 +45,21 @@ export function useBiliAccount() {
     setStatus(next)
   }, [])
 
-  return { status, loading, error, refresh, startQr, pollQr, logout, setStatus }
+  const refreshCookie = useCallback(async () => {
+    const result = await apiFetch<BiliRefreshResponse>('/api/bili/refresh', { method: 'POST' })
+    setStatus(result.account)
+    return result
+  }, [])
+
+  return {
+    status,
+    loading,
+    error,
+    refresh,
+    startQr,
+    pollQr,
+    logout,
+    refreshCookie,
+    setStatus,
+  }
 }

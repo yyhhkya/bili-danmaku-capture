@@ -41,3 +41,12 @@ export interface BiliQrPollResponse {
   account?: BiliStatus
 }
 
+export type BiliRefreshStatus = 'fresh' | 'refreshed' | 'skipped' | 'needs-reauth' | 'throttled'
+
+export interface BiliRefreshResponse {
+  status: BiliRefreshStatus
+  message: string
+  checkedAt: number
+  account: BiliStatus
+}
+

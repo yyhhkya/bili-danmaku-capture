@@ -40,7 +40,7 @@ function AuthenticatedShell({
   expiresAt: number | null
   onLogout: () => Promise<void>
 }) {
-  const { status, loading, startQr, pollQr, logout, setStatus } = useBiliAccount()
+  const { status, loading, startQr, pollQr, logout, refreshCookie, setStatus } = useBiliAccount()
   const [qrOpen, setQrOpen] = useState(false)
 
   const openQr = useCallback(() => setQrOpen(true), [])
@@ -72,6 +72,7 @@ function AuthenticatedShell({
             loading={loading}
             onQrLogin={openQr}
             onLogout={handleBiliLogout}
+            onRefreshCookie={refreshCookie}
           />
           <button
             type="button"

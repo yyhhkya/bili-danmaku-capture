@@ -1,8 +1,10 @@
 import { Router } from 'express'
 
 import type { BiliAccount } from '../bili/account.js'
+import type { CookieRefreshService } from '../bili/cookie-refresh.js'
 import { BiliApiError } from '../bili/http.js'
 import { QrLoginService, QrRateLimitError } from '../bili/qr-login.js'
+import type { BiliRefreshResponse } from '../../shared/types.js'
 
 function sendBiliError(
   res: import('express').Response,
@@ -21,7 +23,11 @@ function sendBiliError(
   res.status(502).json({ error: { code: 'BILI_REQUEST_FAILED', message } })
 }
 
-export function createBiliRouter(account: BiliAccount, qr: QrLoginService): Router {
+export function createBiliRouter(
+  account: BiliAccount,
+  qr: QrLoginService,
+  refresh: CookieRefreshService,
+): Router {
   const router = Router()
 
   router.get('/status', (_req, res) => {
@@ -41,6 +47,16 @@ export function createBiliRouter(account: BiliAccount, qr: QrLoginService): Rout
       res.json(await qr.poll(req.params.handle))
     } catch (error) {
       sendBiliError(res, error, '扫码状态查询失败')
+    }
+  })
+
+  router.post('/refresh', async (_req, res) => {
+    try {
+      const result = await refresh.run(true)
+      const body: BiliRefreshResponse = { ...result, account: account.status() }
+      res.json(body)
+    } catch (error) {
+      sendBiliError(res, error, 'Cookie 续期失败')
     }
   })
 
