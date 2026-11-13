@@ -21,6 +21,7 @@ test('B 站会话加密落盘，可解密还原且不出现明文凭证', async 
     store.setIdentity(42, '测试用户', 'https://i0.hdslb.com/bfs/face/x.jpg')
     store.touch()
     assert.equal(store.snapshot().loggedIn, true)
+    assert.equal(store.snapshot().hasRefreshToken, true)
     await store.persist()
 
     const raw = await fs.promises.readFile(path.join(dir, 'bili-session.json'), 'utf8')
@@ -57,6 +58,7 @@ test('没有会话文件时回退到 .env Cookie', async () => {
     assert.equal(store.get('buvid3'), 'env-buvid3')
     assert.equal(store.snapshot().source, 'env')
     assert.equal(store.snapshot().loggedIn, true)
+    assert.equal(store.snapshot().hasRefreshToken, false)
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true })
   }

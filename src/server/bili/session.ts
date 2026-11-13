@@ -185,6 +185,7 @@ export class BiliSessionStore {
       face: this.face,
       source: this.source,
       needsReauth: this.needsReauth,
+      hasRefreshToken: this.refreshToken.length > 0,
       updatedAt: this.updatedAt,
     }
   }

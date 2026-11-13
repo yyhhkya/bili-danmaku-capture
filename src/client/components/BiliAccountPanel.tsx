@@ -100,6 +100,13 @@ export function BiliAccountPanel({
                 更新于 {shanghaiDateTime(status.updatedAt)}
               </p>
             ) : null}
+            {status && !status.hasRefreshToken ? (
+              <p className="mt-1 text-[11px] leading-relaxed text-warn">
+                {status.source === 'env'
+                  ? '环境变量兜底登录不含刷新令牌，Cookie 到期后需重新扫码'
+                  : '本次登录未取得刷新令牌，Cookie 到期后需重新扫码'}
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-col p-2">
             <button

@@ -24,6 +24,8 @@ export interface BiliStatus {
   face: string | null
   source: BiliLoginSource
   needsReauth: boolean
+  /** 是否持有 refresh_token；没有时 Cookie 到期只能重新扫码 */
+  hasRefreshToken: boolean
   updatedAt: number | null
 }
 

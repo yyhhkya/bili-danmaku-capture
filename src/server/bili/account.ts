@@ -66,7 +66,11 @@ export class BiliAccount {
 
   async onQrSuccess(refreshToken: string): Promise<BiliStatus> {
     this.session.setSource('qr')
-    if (refreshToken) this.session.setRefreshToken(refreshToken)
+    // 空值也要写入：旧令牌属于旧 Cookie，留着会让续期请求对不上
+    this.session.setRefreshToken(refreshToken)
+    if (!refreshToken) {
+      this.logger.warn('扫码登录未返回 refresh_token，Cookie 到期后只能重新扫码')
+    }
     this.session.setNeedsReauth(false)
     this.session.touch()
     await this.session.persist()
