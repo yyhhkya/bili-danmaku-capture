@@ -21,7 +21,7 @@ import {
 import type { AppConfig } from '../config.js'
 import type { Logger } from '../logger.js'
 import { EmoteStore } from './emote-store.js'
-import { JsonlStore, RoomRepository, type StoredRoom } from './store.js'
+import { JsonlStore, RoomRepository, type HistoryPage, type StoredRoom } from './store.js'
 
 const PACKAGE_REFRESH_MS = 15 * 60_000
 const EMOTE_TOKEN_PATTERN = /\[[^[\]]{1,64}\]/g
@@ -423,13 +423,18 @@ export class RoomManager {
     roomId: number,
     date = shanghaiDateKey(),
     limit = 200,
-  ): Promise<NormalizedEvent[]> {
+    before: number | null = null,
+  ): Promise<HistoryPage> {
     const runtime = this.rooms.get(roomId)
     if (!runtime) throw new RoomError('ROOM_NOT_FOUND', '直播间不在监控列表中')
-    const events = await runtime.store.readRecent(date, Math.min(Math.max(limit, 1), 500))
+    const page = await runtime.store.readPage(
+      date,
+      before,
+      Math.min(Math.max(limit, 1), 500),
+    )
     // 落盘时未解析的表情，用当前字典补齐后再回给前端。
-    for (const event of events) fillEventEmoticons(event, runtime.emoticons)
-    return events
+    for (const event of page.events) fillEventEmoticons(event, runtime.emoticons)
+    return page
   }
 
   async dates(roomId: number): Promise<Array<{ date: string; size: number }>> {

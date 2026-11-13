@@ -78,6 +78,30 @@ export function parseEventLine(line: string): NormalizedEvent | null {
   }
 }
 
+export interface HistoryPage {
+  events: NormalizedEvent[]
+  /** 下一页游标：本页最早事件的 ts；null 表示没有更早的记录 */
+  nextBefore: number | null
+  hasMore: boolean
+}
+
+/** 只取一行的 ts 字段，避免过滤时对整行做 JSON 解析。 */
+function readLineTs(line: string): number | null {
+  const marker = '"ts":'
+  const index = line.indexOf(marker)
+  if (index < 0) return null
+  const begin = index + marker.length
+  let cursor = begin
+  while (cursor < line.length) {
+    const code = line.charCodeAt(cursor) - 48
+    if (code < 0 || code > 9) break
+    cursor += 1
+  }
+  if (cursor === begin) return null
+  const value = Number(line.slice(begin, cursor))
+  return Number.isFinite(value) ? value : null
+}
+
 export class JsonlStore {
   private buffer: NormalizedEvent[] = []
   private timer: NodeJS.Timeout | null = null
@@ -164,14 +188,30 @@ export class JsonlStore {
   }
 
   async readRecent(date: string, limit: number): Promise<NormalizedEvent[]> {
+    const page = await this.readPage(date, null, limit)
+    return page.events
+  }
+
+  /**
+   * 按时间游标反向翻页：返回严格早于 beforeTs 的最近 limit 条记录。
+   * 从文件尾部向前扩窗读取，游标翻页不依赖一次读完整天。
+   */
+  async readPage(
+    date: string,
+    beforeTs: number | null,
+    limit: number,
+  ): Promise<HistoryPage> {
     const file = this.filePath(date)
     let stat: fs.Stats
     try {
       stat = await fs.promises.stat(file)
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { events: [], nextBefore: null, hasMore: false }
+      }
       throw error
     }
+    if (stat.size === 0) return { events: [], nextBefore: null, hasMore: false }
 
     let size = Math.min(stat.size, 256 * 1024)
     let start = Math.max(0, stat.size - size)
@@ -190,12 +230,26 @@ export class JsonlStore {
         text = newline >= 0 ? text.slice(newline + 1) : ''
       }
       const lines = text.split('\n').filter((line) => line.trim().length > 0)
-      if (lines.length >= limit || start === 0 || size >= MAX_TAIL_BYTES) {
-        return lines
-          .slice(-limit)
+      const candidates = lines.filter((line) => {
+        const ts = readLineTs(line)
+        if (ts === null) return false
+        return beforeTs === null || ts < beforeTs
+      })
+
+      if (candidates.length > limit || start === 0 || size >= MAX_TAIL_BYTES) {
+        const selected = candidates.slice(-limit)
+        const events = selected
           .map(parseEventLine)
           .filter((event): event is NormalizedEvent => event !== null)
+        const oldest = events[0]
+        const hasMore = events.length > 0 && (candidates.length > selected.length || start > 0)
+        return {
+          events,
+          nextBefore: oldest ? oldest.ts : null,
+          hasMore,
+        }
       }
+
       size = Math.min(size * 2, MAX_TAIL_BYTES)
       start = Math.max(0, stat.size - size)
     }

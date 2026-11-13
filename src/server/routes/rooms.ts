@@ -120,15 +120,19 @@ export function createRoomsRouter(manager: RoomManager, logger: Logger): Router 
     const roomId = roomIdFromParam(req.params.roomId)
     const date = readDate(req.query.date) ?? shanghaiDateKey()
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200))
+    const beforeRaw = typeof req.query.before === 'string' ? req.query.before.trim() : ''
+    const before = beforeRaw === '' ? null : Number(beforeRaw)
     if (!roomId) {
       fail(res, 400, 'INVALID_ROOM', '房间号不合法')
       return
     }
+    if (before !== null && (!Number.isInteger(before) || before < 0)) {
+      fail(res, 400, 'INVALID_CURSOR', '分页游标不合法')
+      return
+    }
     try {
-      const body: RoomHistoryResponse = {
-        date,
-        events: await manager.history(roomId, date, limit),
-      }
+      const page = await manager.history(roomId, date, limit, before)
+      const body: RoomHistoryResponse = { date, ...page }
       res.json(body)
     } catch (error) {
       handleError(res, error, logger, '读取历史弹幕失败')

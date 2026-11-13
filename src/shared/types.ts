@@ -131,6 +131,9 @@ export interface RoomSummary {
 export interface RoomHistoryResponse {
   date: string
   events: NormalizedEvent[]
+  /** 继续往前翻的游标（本页最早事件的 ts），null 表示没有更早记录 */
+  nextBefore: number | null
+  hasMore: boolean
 }
 
 export interface RoomDatesResponse {

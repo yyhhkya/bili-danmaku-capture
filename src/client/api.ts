@@ -74,9 +74,11 @@ export function fetchHistory(
   roomId: number,
   date?: string,
   limit = 200,
+  before: number | null = null,
 ): Promise<RoomHistoryResponse> {
   const params = new URLSearchParams({ limit: String(limit) })
   if (date) params.set('date', date)
+  if (before !== null) params.set('before', String(before))
   return apiFetch<RoomHistoryResponse>(`/api/rooms/${roomId}/history?${params.toString()}`)
 }
 

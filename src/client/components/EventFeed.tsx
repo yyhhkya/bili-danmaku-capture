@@ -13,9 +13,10 @@ interface Props {
   onResume: () => void
   historyLoading: boolean
   resetKey: string
+  hasMore: boolean
+  loadingEarlier: boolean
+  onLoadEarlier: () => void
 }
-
-const RENDER_LIMIT = 500
 
 function FeedSkeleton() {
   return (
@@ -45,12 +46,17 @@ export function EventFeed({
   onResume,
   historyLoading,
   resetKey,
+  hasMore,
+  loadingEarlier,
+  onLoadEarlier,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  const pendingScrollRef = useRef<{ height: number; top: number } | null>(null)
 
   useEffect(() => {
     setAutoScroll(true)
+    pendingScrollRef.current = null
   }, [resetKey])
 
   useLayoutEffect(() => {
@@ -59,11 +65,25 @@ export function EventFeed({
     if (element) element.scrollTop = element.scrollHeight
   }, [events, autoScroll, paused, resetKey])
 
+  // 顶部补页后保持视口位置，避免内容跳动到新加载的片段。
+  useLayoutEffect(() => {
+    const element = containerRef.current
+    const pending = pendingScrollRef.current
+    if (!element || !pending || loadingEarlier) return
+    const delta = element.scrollHeight - pending.height
+    if (delta > 0) element.scrollTop = pending.top + delta
+    pendingScrollRef.current = null
+  }, [events, loadingEarlier])
+
   function handleScroll() {
     const element = containerRef.current
     if (!element) return
     const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 80
     setAutoScroll(nearBottom)
+    if (element.scrollTop < 120 && hasMore && !loadingEarlier) {
+      pendingScrollRef.current = { height: element.scrollHeight, top: element.scrollTop }
+      onLoadEarlier()
+    }
   }
 
   function scrollToBottom() {
@@ -71,8 +91,6 @@ export function EventFeed({
     const element = containerRef.current
     if (element) element.scrollTop = element.scrollHeight
   }
-
-  const visible = events.length > RENDER_LIMIT ? events.slice(-RENDER_LIMIT) : events
 
   return (
     <div className="relative min-h-0 flex-1">
@@ -97,9 +115,19 @@ export function EventFeed({
           </div>
         ) : null}
 
+        {!historyLoading && events.length > 0 ? (
+          <div className="border-b border-line/60 px-4 py-2 text-center text-[11px] text-zinc-600">
+            {loadingEarlier
+              ? '正在加载更早的事件…'
+              : hasMore
+                ? '继续向上滚动加载更早的事件'
+                : '已到当天最早一条'}
+          </div>
+        ) : null}
+
         {historyLoading ? (
           <FeedSkeleton />
-        ) : visible.length === 0 ? (
+        ) : events.length === 0 ? (
           <div className="grid h-full place-items-center px-6 py-16">
             <div className="max-w-sm text-center">
               <span className="mx-auto grid size-11 place-items-center rounded-full border border-line bg-ink-850 text-zinc-600">
@@ -123,14 +151,14 @@ export function EventFeed({
           </div>
         ) : (
           <div>
-            {visible.map((event) => (
+            {events.map((event) => (
               <EventItem key={event.id} event={event} />
             ))}
           </div>
         )}
       </div>
 
-      {!autoScroll && visible.length > 0 ? (
+      {!autoScroll && events.length > 0 ? (
         <button
           type="button"
           onClick={scrollToBottom}

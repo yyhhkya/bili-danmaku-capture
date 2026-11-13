@@ -2,7 +2,7 @@ import { Broadcast, List, SignOut, X } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { EventType, RoomSummary } from '../../shared/types.js'
+import type { EventType, NormalizedEvent, RoomSummary } from '../../shared/types.js'
 import { shanghaiDateKey } from '../../shared/time.js'
 import {
   addRoom as addRoomApi,
@@ -29,6 +29,19 @@ import { useRealtime } from '../hooks/useRealtime.js'
 import { useRoomFeed } from '../hooks/useRoomFeed.js'
 
 const ALL_TYPES: EventType[] = ['danmaku', 'superchat', 'gift', 'guard', 'enter', 'follow']
+/** 懒加载每次补页条数 */
+const PAGE_SIZE = 200
+
+function dedupeById(events: NormalizedEvent[]): NormalizedEvent[] {
+  const seen = new Set<string>()
+  const result: NormalizedEvent[] = []
+  for (const event of events) {
+    if (seen.has(event.id)) continue
+    seen.add(event.id)
+    result.push(event)
+  }
+  return result
+}
 
 interface Props {
   expiresAt: number | null
@@ -54,8 +67,17 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
   const [keyword, setKeyword] = useState('')
   const [dates, setDates] = useState<Array<{ date: string; size: number }>>([])
   const [historyDate, setHistoryDate] = useState(() => shanghaiDateKey())
-  const [historyEvents, setHistoryEvents] = useState<ReturnType<typeof feedStore.snapshot>>([])
+  const [historyEvents, setHistoryEvents] = useState<NormalizedEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null)
+  const [historyHasMore, setHistoryHasMore] = useState(false)
+  const [historyEarlierLoading, setHistoryEarlierLoading] = useState(false)
+
+  // 实时视图里向上翻看时补入的更早事件；与实时流分开存放，避免被缓冲区裁掉。
+  const [liveEarlier, setLiveEarlier] = useState<NormalizedEvent[]>([])
+  const [liveCursor, setLiveCursor] = useState<number | null>(null)
+  const [liveHasMore, setLiveHasMore] = useState(false)
+  const [liveEarlierLoading, setLiveEarlierLoading] = useState(false)
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.roomId === selectedId) ?? null,
@@ -116,9 +138,16 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
   useEffect(() => {
     if (selectedId === null) return
     let cancelled = false
-    fetchHistory(selectedId, undefined, 300)
+    setLiveEarlier([])
+    setLiveCursor(null)
+    setLiveHasMore(false)
+    setLiveEarlierLoading(false)
+    fetchHistory(selectedId, undefined, PAGE_SIZE)
       .then((result) => {
-        if (!cancelled) feedStore.merge(selectedId, result.events)
+        if (cancelled) return
+        setLiveEarlier(result.events)
+        setLiveCursor(result.nextBefore)
+        setLiveHasMore(result.hasMore)
       })
       .catch(() => undefined)
     return () => {
@@ -159,9 +188,15 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
     if (view !== 'history' || selectedId === null) return
     let cancelled = false
     setHistoryLoading(true)
-    fetchHistory(selectedId, historyDate, 500)
+    setHistoryEarlierLoading(false)
+    setHistoryCursor(null)
+    setHistoryHasMore(false)
+    fetchHistory(selectedId, historyDate, PAGE_SIZE)
       .then((result) => {
-        if (!cancelled) setHistoryEvents(result.events)
+        if (cancelled) return
+        setHistoryEvents(result.events)
+        setHistoryCursor(result.nextBefore)
+        setHistoryHasMore(result.hasMore)
       })
       .catch(() => {
         if (!cancelled) setHistoryEvents([])
@@ -174,8 +209,40 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
     }
   }, [view, selectedId, historyDate])
 
+  const loadLiveEarlier = useCallback(() => {
+    if (selectedId === null || !liveHasMore || liveEarlierLoading) return
+    setLiveEarlierLoading(true)
+    fetchHistory(selectedId, undefined, PAGE_SIZE, liveCursor)
+      .then((result) => {
+        setLiveEarlier((previous) => dedupeById([...result.events, ...previous]))
+        setLiveCursor(result.nextBefore)
+        setLiveHasMore(result.hasMore && result.events.length > 0)
+      })
+      .catch(() => undefined)
+      .finally(() => setLiveEarlierLoading(false))
+  }, [selectedId, liveHasMore, liveEarlierLoading, liveCursor])
+
+  const loadHistoryEarlier = useCallback(() => {
+    if (selectedId === null || !historyHasMore || historyEarlierLoading) return
+    setHistoryEarlierLoading(true)
+    fetchHistory(selectedId, historyDate, PAGE_SIZE, historyCursor)
+      .then((result) => {
+        setHistoryEvents((previous) => dedupeById([...result.events, ...previous]))
+        setHistoryCursor(result.nextBefore)
+        setHistoryHasMore(result.hasMore && result.events.length > 0)
+      })
+      .catch(() => undefined)
+      .finally(() => setHistoryEarlierLoading(false))
+  }, [selectedId, historyHasMore, historyEarlierLoading, historyCursor, historyDate])
+
   const liveFeed = useRoomFeed(selectedId, paused)
-  const feedEvents = view === 'live' ? liveFeed.events : historyEvents
+  const liveEvents = useMemo(() => {
+    if (liveEarlier.length === 0) return liveFeed.events
+    const liveIds = new Set(liveFeed.events.map((event) => event.id))
+    const older = liveEarlier.filter((event) => !liveIds.has(event.id))
+    return older.length === 0 ? liveFeed.events : [...older, ...liveFeed.events]
+  }, [liveEarlier, liveFeed.events])
+  const feedEvents = view === 'live' ? liveEvents : historyEvents
 
   const counts = useMemo(() => {
     const result: Record<EventType, number> = {
@@ -243,8 +310,16 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
   }, [])
 
   const handleClear = useCallback(() => {
-    if (view === 'live' && selectedId !== null) feedStore.clear(selectedId)
-    else setHistoryEvents([])
+    if (view === 'live' && selectedId !== null) {
+      feedStore.clear(selectedId)
+      setLiveEarlier([])
+      setLiveCursor(null)
+      setLiveHasMore(false)
+    } else {
+      setHistoryEvents([])
+      setHistoryCursor(null)
+      setHistoryHasMore(false)
+    }
   }, [view, selectedId])
 
   const exportUrl =
@@ -376,6 +451,9 @@ export function DashboardPage({ expiresAt, onLogout }: Props) {
                 onResume={() => setPaused(false)}
                 historyLoading={view === 'history' && historyLoading}
                 resetKey={resetKey}
+                hasMore={view === 'live' ? liveHasMore : historyHasMore}
+                loadingEarlier={view === 'live' ? liveEarlierLoading : historyEarlierLoading}
+                onLoadEarlier={view === 'live' ? loadLiveEarlier : loadHistoryEarlier}
               />
             </>
           ) : (

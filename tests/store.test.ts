@@ -75,6 +75,46 @@ test('JSONL 按北京时间日期落盘，可反向读取最近记录', async ()
   })
 })
 
+test('历史按时间游标反向翻页，不漏不重且能翻到开头', async () => {
+  await withTempDir(async (dir) => {
+    const store = new JsonlStore(path.join(dir, 'room'), silent)
+    const base = Date.UTC(2026, 10, 10, 4, 0, 0)
+    for (let index = 0; index < 5; index += 1) {
+      store.append(makeEvent(base + index * 1000, `第 ${index} 条`))
+    }
+    await store.flush()
+    await store.close()
+
+    const reopened = new JsonlStore(path.join(dir, 'room'), silent)
+    const date = shanghaiDateKey(base)
+
+    const first = await reopened.readPage(date, null, 2)
+    assert.deepEqual(
+      first.events.map((event) => event.text),
+      ['第 3 条', '第 4 条'],
+    )
+    assert.equal(first.hasMore, true)
+    assert.equal(first.nextBefore, base + 3000)
+
+    const second = await reopened.readPage(date, first.nextBefore, 2)
+    assert.deepEqual(
+      second.events.map((event) => event.text),
+      ['第 1 条', '第 2 条'],
+    )
+    assert.equal(second.hasMore, true)
+    assert.equal(second.nextBefore, base + 1000)
+
+    const third = await reopened.readPage(date, second.nextBefore, 2)
+    assert.deepEqual(third.events.map((event) => event.text), ['第 0 条'])
+    assert.equal(third.hasMore, false)
+    assert.equal(third.nextBefore, base)
+
+    const end = await reopened.readPage(date, third.nextBefore, 2)
+    assert.deepEqual(end.events, [])
+    assert.equal(end.hasMore, false)
+  })
+})
+
 test('CSV 转义防止公式注入与引号破坏', () => {
   assert.equal(csvEscape('普通文本'), '普通文本')
   assert.equal(csvEscape('=1+1'), "'=1+1")
